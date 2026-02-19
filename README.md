@@ -25,11 +25,11 @@ Windows(Windows 11)、Mac(Apple M4, macOS Sequoia)及びLinux(Ubuntu 22.04)環�
 
 次のgifアニメーションは、
 
-[国立国会図書館総務部総務課 編『国立国会図書館年報』昭和27年度,国立国会図書館,1954. 国立国会図書館デジタルコレクション https://dl.ndl.go.jp/pid/3048008"](https://dl.ndl.go.jp/pid/3048008/1/19)
+[国立国会図書館総務部総務課 編『国立国会図書館年報』昭和27年度,国立国会図書館,1954. 国立国会図書館デジタルコレクション https://dl.ndl.go.jp/pid/3048008"](https://dl.ndl.go.jp/pid/3048008/1/24)
 
-をNDLOCR-Liteの画面キャプチャ機能によってテキスト化するデモを示しています。
+をNDLOCR-Liteの画面キャプチャ機能によって、画像ファイルを介さずにテキスト化するデモを示しています。
 
-<img src="resource/demo.gif" width="600">
+<img src="resource/demo_lite.gif" width="600">
 
 ## コマンドラインからの利用
 ※コマンドラインから操作を行うにはPython 3.10以上が必要です。
