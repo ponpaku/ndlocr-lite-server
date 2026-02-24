@@ -20,7 +20,7 @@ Windows(Windows 11)、Mac(Apple M4, macOS Sequoia)及びLinux(Ubuntu 22.04)環�
 [releases](https://github.com/ndl-lab/ndlocr-lite/releases)からお使いのOS環境（Windows/Mac/Linux）に合ったファイルをダウンロードしてください。
 
 
-デスクトップアプリケーションの操作方法及びビルド方法については[デスクトップアプリケーションの利用方法](./ndlocr-lite-gui/README.md)を参照してください。
+デスクトップアプリケーションの操作方法については[NDLOCR-Liteの使い方](https://lab.ndl.go.jp/data_set/ndlocrlite-usage/)、ビルド方法については[デスクトップアプリケーションの利用方法](./ndlocr-lite-gui/README.md)を参照してください。
 
 
 次のgifアニメーションは、
