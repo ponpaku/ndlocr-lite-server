@@ -53,6 +53,7 @@ python3 ocr.py --sourceimg digidepo_1287221_00000002.jpg --output tmpdir
 
 uv(https://github.com/astral-sh/uv
 )をお使いの環境であれば、以下のようにしても導入・実行可能です。この場合、「ndlocr-lite」というコマンドから実行できます。
+
 導入方法
 ```
 git clone https://github.com/ndl-lab/ndlocr-lite
