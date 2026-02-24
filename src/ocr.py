@@ -247,28 +247,29 @@ def process(args):
             wtf.write("\n".join(alltextlist))
         print("Total calculation time (Detection + Recognition):",time.time()-start)
 
-
-if __name__=="__main__":
+def main():
     import argparse
-    
+    from pathlib import Path
+    base_dir = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Arguments for NDLkotenOCR-Lite")
 
     parser.add_argument("--sourcedir", type=str, required=False, help="Path to image directory")
     parser.add_argument("--sourceimg", type=str, required=False, help="Path to image directory")
     parser.add_argument("--output", type=str, required=True, help="Path to output directory")
     parser.add_argument("--viz", type=bool, required=False, help="Save visualized image",default=False)
-    parser.add_argument("--det-weights", type=str, required=False, help="Path to deim onnx file", default="model/deim-s-1024x1024.onnx")
-    parser.add_argument("--det-classes", type=str, required=False, help="Path to list of class in yaml file",default="config/ndl.yaml")
+    parser.add_argument("--det-weights", type=str, required=False, help="Path to deim onnx file", default=str(base_dir / "model" / "deim-s-1024x1024.onnx"))
+    parser.add_argument("--det-classes", type=str, required=False, help="Path to list of class in yaml file", default=str(base_dir / "config" / "ndl.yaml"))
     parser.add_argument("--det-score-threshold", type=float, required=False, default=0.2)
     parser.add_argument("--det-conf-threshold", type=float, required=False, default=0.25)
     parser.add_argument("--det-iou-threshold", type=float, required=False, default=0.2)
     parser.add_argument("--simple-mode", type=bool, required=False, help="Read line with one model(Setting this option to True will slow down processing, but it simplifies the architecture and may slightly improve accuracy.)",default=False)
-    parser.add_argument("--rec-weights30", type=str, required=False, help="Path to parseq-tiny onnx file", default="./model/parseq-ndl-16x256-30-tiny-192epoch-tegaki3.onnx")
-    parser.add_argument("--rec-weights50", type=str, required=False, help="Path to parseq-tiny onnx file", default="./model/parseq-ndl-16x384-50-tiny-146epoch-tegaki2.onnx")
-    parser.add_argument("--rec-weights", type=str, required=False, help="Path to parseq-tiny onnx file", default="./model/parseq-ndl-16x768-100-tiny-165epoch-tegaki2.onnx")
-    parser.add_argument("--rec-classes", type=str, required=False, help="Path to list of class in yaml file", default="config/NDLmoji.yaml")
+    parser.add_argument("--rec-weights30", type=str, required=False, help="Path to parseq-tiny onnx file", default=str(base_dir / "model" / "parseq-ndl-16x256-30-tiny-192epoch-tegaki3.onnx"))
+    parser.add_argument("--rec-weights50", type=str, required=False, help="Path to parseq-tiny onnx file", default=str(base_dir / "model" / "parseq-ndl-16x384-50-tiny-146epoch-tegaki2.onnx"))
+    parser.add_argument("--rec-weights", type=str, required=False, help="Path to parseq-tiny onnx file", default=str(base_dir / "model" / "parseq-ndl-16x768-100-tiny-165epoch-tegaki2.onnx"))
+    parser.add_argument("--rec-classes", type=str, required=False, help="Path to list of class in yaml file", default=str(base_dir / "config" / "NDLmoji.yaml"))
     parser.add_argument("--device", type=str, required=False, help="Device use (cpu or cuda)", choices=["cpu", "cuda"], default="cpu")
     args = parser.parse_args()
     process(args)
-    
 
+if __name__=="__main__":
+    main()

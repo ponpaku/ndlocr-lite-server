@@ -72,8 +72,9 @@ OCR結果を保存する出力先ディレクトリを相対パスまたは絶�
 ## OCR結果の例
 |資料画像|OCR結果の冒頭（誤認識を含む）|OCR結果のxml|
 |---|---|---|
-|<img src="./resource/viz_digidepo_2531162_0024.jpg" width="400"><br>国立国会図書館総務部 編『国立国会図書館スタッフ・マニュアル』E-2,国立国会図書館,1963.8. https://dl.ndl.go.jp/pid/2531162/1/23|(ヱ)気送子送付管気送子送付には、上記気送響にて送付するものと、空気の圧縮を使用せず,直接落下させる装置の二通りがある。後者の送付管は山納台左側に設置されており.5|[OCR結果(xmlファイル)](./resource/digidepo_2531162_0024.xml)|
+|<img src="./resource/viz_digidepo_2531162_0024.jpg" width="400"><br>国立国会図書館総務部 編『国立国会図書館スタッフ・マニュアル』E-2,国立国会図書館,1963.8. 国立国会図書館デジタルコレクション https://dl.ndl.go.jp/pid/2531162/1/23|(ヱ)気送子送付管気送子送付には、上記気送響にて送付するものと、空気の圧縮を使用せず,直接落下させる装置の二通りがある。後者の送付管は山納台左側に設置されており.5|[OCR結果(xmlファイル)](./resource/digidepo_2531162_0024.xml)|
 |<img src="./resource/viz_digidepo_11048278_po_geppo1803_00021.jpg" width="400"><br> 館内スコープ　次世代室の謎に迫れ！. 国立国会図書館月報. 2018, (683),　 p.20. http://dl.ndl.go.jp/info:ndljp/pid/11048278|はじめまして!私は2017年4月に就職後、次世代システム開発研究室(次世代室)という場所で仕事をしています。でも、「次世代室」って何をするところか想像しにくいですよね。次世代室は、図書館の役割がインターネット等の情報技術で変化する中、より先進的なサービスを検討していくために作られた比較的新しい部署です。|[OCR結果(xmlファイル)](./resource/digidepo_11048278_po_geppo1803_00021.xml)|
+|<img src="./resource/viz_digidepo_3048008_0025.jpg" width="400"><br>国立国会図書館総務部総務課 編『国立国会図書館年報』昭和27年度,国立国会図書館,1954. 国立国会図書館デジタルコレクション https://dl.ndl.go.jp/pid/3048008/1/25|第8章職員、庁舍、財政、記念行事等1.職員A.司書職員の研修昭和26年度(第4回)研修に引続き、昭和27年度(第5回)司書職員研修を27年6月2日から28年4月10日まで320時間、研修生50名に実施した。本年度は、東京学芸大学の協力を得て、講師は、本館職員が専門分野の科目を担当した外、東京学芸大学の教授が担当した。本年度も單位科目ごとに試験を実施し、必修科目(11單位)選択科目(4單位)合わせて15單位以上の試験に合格した43名が修了した。|[OCR結果(xmlファイル)](./resource/digidepo_3048008_0025.xml)|
 
 
 ## モデルの再学習及びカスタマイズについて（開発者向け情報）
@@ -86,7 +87,7 @@ NDLOCR-Liteは「レイアウト認識」、「文字列認識」、「読み順
 
 レイアウト認識にはDEIMv2[1]、文字列認識にはPARSeq[2]をそれぞれ用いており、読み順整序については当館が公開している[NDLOCR](https://github.com/ndl-lab/ndlocr_cli)と同様のモジュールを用いています。
 
-[1]Shihua Huang and Yongjie Hou and Longfei Liu and Xuanlong Yu and Xi Shen. Real-Time Object Detection Meets DINOv3. arXiv preprint arXiv:2509.20787, 2022.(https://arxiv.org/abs/2509.20787)
+[1]Shihua Huang and Yongjie Hou and Longfei Liu and Xuanlong Yu and Xi Shen. Real-Time Object Detection Meets DINOv3. arXiv preprint arXiv:2509.20787, 2025.(https://arxiv.org/abs/2509.20787)
 
 [2]Darwin Bautista, Rowel Atienza. Scene text recognition with permuted autoregressive sequence models. arXiv:2212.06966, 2022. (https://arxiv.org/abs/2207.06966)
 

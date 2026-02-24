@@ -12,4 +12,3 @@ tqdm==4.66.4
 reportlab==4.2.5
 pypdfium2==4.30.0
 numpy==2.2.2
-requests==2.32.3
