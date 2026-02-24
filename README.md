@@ -48,7 +48,20 @@ python3 ocr.py --sourcedir 9892834_0001 --output tmpdir
 
 実行例2.（同階層にある「digidepo_1287221_00000002.jpg」という名称の画像を処理し、tmpdirという名称のディレクトリに結果を出力する。）
 ```
-python3 ocr.py --sourceimg digidepo_1287221_00000002.jpg --output tmpdir 
+python3 ocr.py --sourceimg digidepo_1287221_00000002.jpg --output tmpdir
+```
+
+uv(https://github.com/astral-sh/uv)をお使いの環境であれば、以下のようにしても導入・実行可能です。この場合、「ndlocr-lite」というコマンドから実行できます。
+導入方法
+```
+git clone https://github.com/ndl-lab/ndlocr-lite
+cd ndlocr-lite
+uv tool install .
+```
+
+実行例
+```
+ndlocr-lite --sourceimg digidepo_1287221_00000002.jpg --output tmpdir 
 ```
 
 ### パラメータの説明
