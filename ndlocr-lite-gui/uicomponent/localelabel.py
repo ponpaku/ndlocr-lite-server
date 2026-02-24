@@ -65,7 +65,7 @@ TRANSLATIONS = {
     },
     "main_cap_btn":{
         "ja":"キャプチャモード",
-        "en":"ScreenCapture Mode"
+        "en":"Screen Capture Mode"
     },
     "main_customize_btn":{
         "ja":"出力形式の選択",
