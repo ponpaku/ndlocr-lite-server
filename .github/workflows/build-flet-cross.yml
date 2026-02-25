@@ -62,7 +62,7 @@ jobs:
           cd ndlocr-lite-gui
           cp -r ../src .
           EXTRA_ARGS=""
-          # Intel Macの場合のみ pyproject.toml を上書きする処理を追加
+          # Intel Macの場合のみ引数を追加する処理
           if [ "${{ matrix.runs-on }}" = "macos-15-intel" ]; then
             echo "Intel Mac detected: Configuring specific settings..."
             EXTRA_ARGS="--arch x64"
