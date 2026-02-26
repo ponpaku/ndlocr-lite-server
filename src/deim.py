@@ -35,7 +35,10 @@ class DEIM:
         #opt_session.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
         providers = ['CPUExecutionProvider']
         if self.device.casefold() == "cuda":
-            providers = ['CUDAExecutionProvider','CPUExecutionProvider']
+            providers = [
+                ('CUDAExecutionProvider', {'arena_extend_strategy': 'kSameAsRequested'}),
+                'CPUExecutionProvider',
+            ]
         session = onnxruntime.InferenceSession(self.model_path,opt_session, providers=providers)
         self.session = session
         self.model_inputs = self.session.get_inputs()

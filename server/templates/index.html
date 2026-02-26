@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="ja">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>NDLOCR-Lite OCR Console</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=M+PLUS+1p:wght@400;500;700&display=swap"
+			rel="stylesheet"
+		/>
+		<style>
+			:root {
+				--bg: #f3faf7;
+				--panel: rgba(255, 255, 255, 0.9);
+				--panel-inner: #ffffff;
+				--ink: #1f2937;
+				--muted: #556070;
+				--line: #d0dce8;
+				--accent: #0f766e;
+				--accent-hover: #0d6460;
+				--accent-light: #ccfbf1;
+				--warn: #b45309;
+				--danger: #dc2626;
+				--success: #059669;
+				--mono: "JetBrains Mono", ui-monospace, monospace;
+				--sans: "M PLUS 1p", "Hiragino Kaku Gothic ProN", sans-serif;
+				--shadow: 0 2px 12px rgba(15, 23, 42, 0.08);
+				--radius: 12px;
+				--tab-h: 38px;
+			}
+
+			[data-theme="dark"] {
+				--bg: #0f172a;
+				--panel: #1e293b;
+				--panel-inner: #0f172a;
+				--ink: #f1f5f9;
+				--muted: #94a3b8;
+				--line: #334155;
+				--accent: #2dd4bf;
+				--accent-hover: #5eead4;
+				--accent-light: rgba(45, 212, 191, 0.15);
+				--warn: #fbbf24;
+				--danger: #f87171;
+				--success: #34d399;
+				--shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+			}
+
+			* { box-sizing: border-box; margin: 0; padding: 0; }
+
+			html, body {
+				height: 100%;
+				font-family: var(--sans);
+				color: var(--ink);
+				background: var(--bg);
+				transition: background .2s, color .2s;
+			}
+
+			.wrap {
+				max-width: 1200px;
+				margin: 0 auto;
+				padding: 16px 14px 40px;
+				display: grid;
+				gap: 12px;
+			}
+
+			.panel {
+				background: var(--panel);
+				border: 1px solid var(--line);
+				border-radius: var(--radius);
+				box-shadow: var(--shadow);
+			}
+
+			/* ── Header ── */
+			.header {
+				padding: 14px 18px;
+				display: flex;
+				flex-wrap: wrap;
+				gap: 10px;
+				align-items: center;
+				justify-content: space-between;
+			}
+
+			h1 { font-size: 18px; letter-spacing: .02em; }
+
+			.header-right {
+				display: flex;
+				gap: 8px;
+				flex-wrap: wrap;
+				align-items: center;
+			}
+
+			.tag {
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				font-size: 11px;
+				font-family: var(--mono);
+				border: 1px solid var(--line);
+				border-radius: 999px;
+				padding: 5px 10px;
+				background: var(--panel-inner);
+				color: var(--muted);
+			}
+
+			.tag-dot {
+				width: 7px; height: 7px;
+				border-radius: 50%;
+				display: inline-block;
+				background: var(--muted);
+			}
+			.tag-dot.green { background: var(--success); }
+			.tag-dot.red   { background: var(--danger); }
+
+			.btn-icon {
+				width: 32px; height: 32px;
+				display: grid; place-items: center;
+				border: 1px solid var(--line);
+				border-radius: 8px;
+				background: var(--panel-inner);
+				cursor: pointer;
+				color: var(--muted);
+				font-size: 16px;
+				line-height: 1;
+				flex-shrink: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}
+			.btn-icon:hover { color: var(--ink); border-color: var(--accent); }
+			#themeToggle { font-style: normal; color: initial; }
+
+			/* ── Form ── */
+			form {
+				padding: 14px 18px 18px;
+				display: grid;
+				gap: 12px;
+			}
+
+			fieldset {
+				border: 1px solid var(--line);
+				border-radius: 10px;
+				padding: 10px 12px 12px;
+				background: var(--panel-inner);
+			}
+
+			legend {
+				padding: 0 6px;
+				font-size: 11px;
+				font-weight: 700;
+				color: var(--muted);
+				letter-spacing: .05em;
+			}
+
+			.group-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+				gap: 10px;
+				margin-top: 10px;
+			}
+
+			label {
+				display: grid;
+				gap: 5px;
+				font-size: 12px;
+				color: var(--muted);
+			}
+
+			input, select {
+				font: inherit;
+				width: 100%;
+				border: 1px solid var(--line);
+				border-radius: 8px;
+				padding: 8px 10px;
+				background: var(--panel-inner);
+				color: var(--ink);
+				font-size: 13px;
+			}
+			input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+			.file-dropzone {
+				position: relative;
+				min-height: 80px;
+				border: 2px dashed var(--line);
+				border-radius: 10px;
+				background: var(--bg);
+				display: grid;
+				place-items: center;
+				text-align: center;
+				padding: 10px;
+				transition: border-color .15s, background .15s;
+				cursor: pointer;
+			}
+			.file-dropzone.is-dragging {
+				border-color: var(--accent);
+				background: var(--accent-light);
+			}
+			.file-drop-text { font-size: 12px; color: var(--muted); pointer-events: none; }
+			.file-drop-text strong { display: block; color: var(--ink); font-size: 13px; margin-bottom: 3px; }
+			.file-input-overlay {
+				position: absolute; inset: 0; opacity: 0; cursor: pointer;
+				width: 100%; height: 100%;
+			}
+
+
+			.actions {
+				display: flex; align-items: center; gap: 10px; grid-column: 1 / -1;
+			}
+
+			button {
+				font: inherit; border: 0; border-radius: 8px; padding: 9px 18px;
+				cursor: pointer; font-weight: 600; font-size: 13px;
+			}
+			.btn-primary { background: var(--accent); color: #fff; }
+			.btn-primary:hover { background: var(--accent-hover); }
+			.btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+			.btn-cancel { background: var(--warn); color: #fff; }
+			.btn-cancel:disabled { opacity: .55; cursor: not-allowed; }
+			.btn-outline {
+				background: var(--panel-inner); border: 1px solid var(--line); color: var(--muted);
+			}
+			.btn-outline:hover { border-color: var(--accent); color: var(--ink); }
+			.btn-outline.copied { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+			.note { font-size: 12px; color: var(--muted); }
+			.hidden { display: none !important; }
+
+			/* ── Result panel ── */
+			.result-header {
+				padding: 12px 18px;
+				border-bottom: 1px solid var(--line);
+				display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+			}
+			.result-header .btn-outline { margin-left: auto; }
+
+			.page-picker {
+				padding: 10px 18px 0;
+				display: flex; align-items: center; gap: 10px;
+			}
+			.page-picker label { min-width: fit-content; }
+			.page-picker select { max-width: 220px; }
+
+			.summary-row {
+				padding: 8px 18px 0;
+				display: flex; flex-wrap: wrap; gap: 6px;
+			}
+			.badge {
+				font-size: 11px; font-family: var(--mono);
+				border-radius: 999px; padding: 3px 9px;
+				background: var(--accent-light); color: var(--accent);
+				border: 1px solid var(--accent);
+			}
+
+			/* ── Tabs ── */
+			.tabs {
+				display: flex; gap: 2px;
+				padding: 10px 18px 0;
+				border-bottom: 1px solid var(--line);
+			}
+			.tab-btn {
+				height: var(--tab-h); padding: 0 14px;
+				background: transparent; border: 0; border-bottom: 2px solid transparent;
+				color: var(--muted); font-size: 12px; font-weight: 600;
+				cursor: pointer; border-radius: 0;
+				transition: color .1s, border-color .1s;
+			}
+			.tab-btn:hover { color: var(--ink); }
+			.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+			.tab-panel { display: none; padding: 14px 18px 18px; }
+			.tab-panel.active { display: block; }
+
+			/* text tab */
+			pre.ocr-text {
+				font-family: var(--mono); font-size: 12px; line-height: 1.7;
+				white-space: pre-wrap; word-break: break-word;
+				background: var(--panel-inner); border: 1px solid var(--line);
+				border-radius: 8px; padding: 12px;
+				max-height: 600px; overflow-y: auto;
+			}
+
+			/* html tab */
+			.html-preview-wrap { display: flex; flex-direction: column; gap: 8px; }
+			.html-preview-actions { display: flex; gap: 8px; align-items: center; }
+			iframe.html-frame {
+				width: 100%; height: 500px;
+				border: 1px solid var(--line); border-radius: 8px; background: #fff;
+			}
+
+			/* layout tab */
+			.layout-preview-wrap { text-align: center; }
+			.layout-img {
+				max-width: 100%; height: auto;
+				border: 1px solid var(--line); border-radius: 8px; cursor: zoom-in;
+			}
+
+			/* ── Lightbox ── */
+			#lightbox {
+				position: fixed; inset: 0;
+				background: rgba(0,0,0,.8); z-index: 999;
+				display: flex; align-items: center; justify-content: center; padding: 20px;
+			}
+			#lightbox-close {
+				position: fixed; top: 14px; right: 18px;
+				width: 36px; height: 36px; border-radius: 50%;
+				background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3);
+				color: #fff; font-size: 20px; cursor: pointer;
+				display: grid; place-items: center; line-height: 1;
+			}
+			#lightbox-content { max-width: 96vw; max-height: 92vh; overflow: auto; }
+			#lightbox-content img { max-width: 100%; max-height: 88vh; border-radius: 4px; }
+			#lightbox-content iframe {
+				width: 90vw; height: 88vh; border: none; border-radius: 4px; background: #fff;
+			}
+
+			@media (max-width: 640px) { .group-grid { grid-template-columns: 1fr; } }
+		</style>
+	</head>
+	<body>
+		<div class="wrap">
+			<!-- ── Header ── -->
+			<section class="panel">
+				<div class="header">
+					<h1>NDLOCR-Lite OCR Console</h1>
+					<div class="header-right">
+						<span class="tag" id="statusModel">model: -</span>
+						<span class="tag" id="statusDevice">device: -</span>
+						<span class="tag" id="statusCuda">
+							<span class="tag-dot" id="cudaDot"></span>cuda: -
+						</span>
+						<button class="btn-icon" id="themeToggle" title="ダークモード切替" aria-label="toggle dark mode">🌙</button>
+					</div>
+				</div>
+
+				<!-- ── Upload Form ── -->
+				<form id="analyzeForm">
+					<fieldset>
+						<legend>入力ファイル</legend>
+						<div class="group-grid">
+							<label style="grid-column: 1 / -1;">
+								<span>画像 / PDF</span>
+								<div class="file-dropzone" id="fileDropzone">
+									<div class="file-drop-text" id="fileDropText">
+										<strong>ドラッグ &amp; ドロップ</strong>
+										またはクリックしてファイルを選択
+									</div>
+									<input id="file" name="file" type="file"
+										class="file-input-overlay" accept=".pdf,image/*" required />
+								</div>
+							</label>
+						</div>
+					</fieldset>
+
+					<fieldset>
+						<legend>設定</legend>
+						<div class="group-grid">
+							<label>
+								<span>改行処理</span>
+								<select id="linebreak_mode" name="linebreak_mode">
+									<option value="none" selected>処理しない（行ごとに改行）</option>
+									<option value="paragraph">種別別整形（見出し・本文・注を分離）</option>
+									<option value="compact">全結合（改行をすべて除去）</option>
+								</select>
+							</label>
+							<label>
+								<span>DPI（PDF のみ）</span>
+								<input id="dpi" name="dpi" type="number" min="72" max="600" value="220" />
+							</label>
+						</div>
+					</fieldset>
+
+					<div class="actions">
+						<button id="submitBtn" class="btn-primary" type="submit">実行</button>
+						<button id="cancelBtn" class="btn-cancel hidden" type="button" disabled>中断</button>
+						<span class="note" id="requestNote">待機中</span>
+					</div>
+				</form>
+			</section>
+
+			<!-- ── Results ── -->
+			<section class="panel hidden" id="resultPanel">
+				<div class="result-header">
+					<span class="tag" id="tagLinebreak">linebreak: -</span>
+					<span class="tag" id="tagPages">pages: -</span>
+					<span class="tag" id="tagDevice">device: -</span>
+					<button id="copyBtn" class="btn-outline" type="button" disabled>コピー</button>
+				</div>
+
+				<div class="page-picker hidden" id="pagePickerWrap">
+					<label for="pageSelect" style="font-size:12px;color:var(--muted);">ページ</label>
+					<select id="pageSelect"></select>
+				</div>
+
+				<div class="summary-row" id="summaryRow"></div>
+
+				<!-- tabs -->
+				<div class="tabs">
+					<button class="tab-btn active" data-tab="text">テキスト</button>
+					<button class="tab-btn" data-tab="html">HTML</button>
+					<button class="tab-btn" data-tab="layout">レイアウト</button>
+				</div>
+
+				<!-- テキスト tab -->
+				<div class="tab-panel active" id="panel-text">
+					<pre class="ocr-text" id="textContent">ここに認識結果が表示されます。</pre>
+				</div>
+
+				<!-- HTML tab -->
+				<div class="tab-panel" id="panel-html">
+					<div class="html-preview-wrap">
+						<div class="html-preview-actions">
+							<span class="note">レンダリングされた OCR 結果</span>
+							<button class="btn-outline" id="htmlExpandBtn" type="button">全画面</button>
+							<button class="btn-outline" id="htmlCopyBtn" type="button">HTML コピー</button>
+						</div>
+						<iframe class="html-frame" id="htmlFrame" sandbox="allow-same-origin"></iframe>
+					</div>
+				</div>
+
+				<!-- レイアウト tab -->
+				<div class="tab-panel" id="panel-layout">
+					<div class="layout-preview-wrap">
+						<img class="layout-img hidden" id="layoutImg" alt="layout preview" />
+						<p class="note hidden" id="layoutNone">レイアウトプレビューがありません。</p>
+					</div>
+				</div>
+			</section>
+		</div>
+
+		<!-- Lightbox -->
+		<div id="lightbox" class="hidden" role="dialog" aria-modal="true">
+			<button id="lightbox-close" aria-label="閉じる">✕</button>
+			<div id="lightbox-content"></div>
+		</div>
+
+		<script>
+// ─────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────
+let currentResults   = [];
+let currentPageIndex = 0;
+let activeRequestId  = null;
+let progressTimer    = null;
+let copyTimer        = null;
+
+// ─────────────────────────────────────────────────────────
+// DOM refs
+// ─────────────────────────────────────────────────────────
+const form           = document.getElementById("analyzeForm");
+const submitBtn      = document.getElementById("submitBtn");
+const cancelBtn      = document.getElementById("cancelBtn");
+const copyBtn        = document.getElementById("copyBtn");
+const requestNote    = document.getElementById("requestNote");
+const fileInput      = document.getElementById("file");
+const fileDropzone   = document.getElementById("fileDropzone");
+const fileDropText   = document.getElementById("fileDropText");
+const pagePickerWrap = document.getElementById("pagePickerWrap");
+const pageSelect     = document.getElementById("pageSelect");
+const resultPanel    = document.getElementById("resultPanel");
+const summaryRow     = document.getElementById("summaryRow");
+const textContent    = document.getElementById("textContent");
+const htmlFrame      = document.getElementById("htmlFrame");
+const layoutImg      = document.getElementById("layoutImg");
+const layoutNone     = document.getElementById("layoutNone");
+const lightbox       = document.getElementById("lightbox");
+const lightboxClose  = document.getElementById("lightbox-close");
+const lightboxContent= document.getElementById("lightbox-content");
+
+// ─────────────────────────────────────────────────────────
+// Dark mode
+// ─────────────────────────────────────────────────────────
+const themeToggle = document.getElementById("themeToggle");
+
+function applyTheme(dark) {
+	document.documentElement.setAttribute("data-theme", dark ? "dark" : "");
+	themeToggle.textContent = dark ? "☀️" : "🌙";
+}
+
+(function initTheme() {
+	const stored = localStorage.getItem("ndlocr_theme");
+	const dark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+	applyTheme(dark);
+})();
+
+themeToggle.addEventListener("click", () => {
+	const dark = document.documentElement.getAttribute("data-theme") !== "dark";
+	applyTheme(dark);
+	localStorage.setItem("ndlocr_theme", dark ? "dark" : "light");
+});
+
+// ─────────────────────────────────────────────────────────
+// File dropzone
+// ─────────────────────────────────────────────────────────
+function updateDropText() {
+	if (fileInput.files && fileInput.files.length > 0) {
+		fileDropText.innerHTML = `<strong>選択中:</strong> ${fileInput.files[0].name}`;
+	} else {
+		fileDropText.innerHTML = "<strong>ドラッグ &amp; ドロップ</strong> またはクリックしてファイルを選択";
+	}
+}
+
+fileDropzone.addEventListener("dragenter", e => { e.preventDefault(); fileDropzone.classList.add("is-dragging"); });
+fileDropzone.addEventListener("dragleave", e => { e.preventDefault(); if (!fileDropzone.contains(e.relatedTarget)) fileDropzone.classList.remove("is-dragging"); });
+fileDropzone.addEventListener("dragover",  e => { e.preventDefault(); fileDropzone.classList.add("is-dragging"); });
+fileDropzone.addEventListener("drop", e => {
+	e.preventDefault();
+	fileDropzone.classList.remove("is-dragging");
+	const files = e.dataTransfer && e.dataTransfer.files;
+	if (!files || !files.length) return;
+	try { const dt = new DataTransfer(); for (const f of files) dt.items.add(f); fileInput.files = dt.files; } catch(_) {}
+	updateDropText();
+});
+fileInput.addEventListener("change", updateDropText);
+
+// ─────────────────────────────────────────────────────────
+// Status
+// ─────────────────────────────────────────────────────────
+async function fetchStatus() {
+	try {
+		const r = await fetch("/api/status");
+		const p = await r.json();
+		document.getElementById("statusModel").textContent  = `model: ${p.model || "-"}`;
+		document.getElementById("statusDevice").textContent = `device: ${p.device_default || "-"}`;
+		const cudaOk = !!p.cuda_available;
+		document.getElementById("statusCuda").innerHTML =
+			`<span class="tag-dot ${cudaOk ? "green" : "red"}"></span>cuda: ${cudaOk}`;
+		const cudaOpt = document.querySelector('#device option[value="cuda"]');
+		if (cudaOpt) {
+			cudaOpt.disabled = !cudaOk;
+			if (!cudaOk && document.getElementById("device").value === "cuda")
+				document.getElementById("device").value = "auto";
+		}
+	} catch(_) {}
+}
+
+// ─────────────────────────────────────────────────────────
+// Progress polling
+// ─────────────────────────────────────────────────────────
+function stopPolling() {
+	if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+}
+
+function startPolling(rid) {
+	stopPolling();
+	const poll = async () => {
+		try {
+			const r = await fetch(`/api/progress/${encodeURIComponent(rid)}`);
+			if (!r.ok) return;
+			const p = await r.json();
+			setBusy(true, p.message || "解析中...");
+			if (p.total_pages) document.getElementById("tagPages").textContent = `pages: ${p.total_pages}`;
+			if (p.state === "done" || p.state === "error" || p.state === "canceled") stopPolling();
+		} catch(_) {}
+	};
+	poll();
+	progressTimer = setInterval(poll, 500);
+}
+
+// ─────────────────────────────────────────────────────────
+// UI helpers
+// ─────────────────────────────────────────────────────────
+function setBusy(busy, msg) {
+	submitBtn.disabled = busy;
+	const canCancel = busy && !!activeRequestId;
+	cancelBtn.disabled = !canCancel;
+	cancelBtn.classList.toggle("hidden", !canCancel);
+	requestNote.textContent = msg;
+}
+
+function genId() {
+	return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+// ─────────────────────────────────────────────────────────
+// Tabs
+// ─────────────────────────────────────────────────────────
+document.querySelectorAll(".tab-btn").forEach(btn => {
+	btn.addEventListener("click", () => {
+		document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+		document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+		btn.classList.add("active");
+		document.getElementById(`panel-${btn.dataset.tab}`).classList.add("active");
+	});
+});
+
+// ─────────────────────────────────────────────────────────
+// Lightbox
+// ─────────────────────────────────────────────────────────
+function escAttr(s) {
+	return s.replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function openImageLightbox(src) {
+	lightboxContent.innerHTML = `<img src="${src}" alt="preview" />`;
+	lightbox.classList.remove("hidden");
+	document.body.style.overflow = "hidden";
+}
+
+function openHtmlLightbox(html) {
+	lightboxContent.innerHTML = `<iframe srcdoc="${escAttr(html)}" sandbox="allow-same-origin"></iframe>`;
+	lightbox.classList.remove("hidden");
+	document.body.style.overflow = "hidden";
+}
+
+function closeLightbox() {
+	lightbox.classList.add("hidden");
+	lightboxContent.innerHTML = "";
+	document.body.style.overflow = "";
+}
+
+lightboxClose.addEventListener("click", closeLightbox);
+lightbox.addEventListener("click", e => { if (e.target === lightbox) closeLightbox(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeLightbox(); });
+
+// ─────────────────────────────────────────────────────────
+// Summary badges
+// ─────────────────────────────────────────────────────────
+function renderSummary(summary) {
+	summaryRow.innerHTML = "";
+	if (!summary || Object.keys(summary).length === 0) return;
+	const labelMap = {
+		text_block:"本文ブロック", line_main:"本文", line_title:"見出し",
+		line_caption:"キャプション", line_note:"割注", line_note_tochu:"頭注",
+		block_fig:"図版", block_table:"表", block_pillar:"柱",
+		block_folio:"ノンブル", block_chart:"図表", block_eqn:"数式",
+		block_ad:"広告", block_rubi:"ルビ",
+	};
+	Object.entries(summary)
+		.sort((a,b) => b[1]-a[1])
+		.forEach(([k,v]) => {
+			const span = document.createElement("span");
+			span.className = "badge";
+			span.textContent = `${labelMap[k]||k}: ${v}`;
+			summaryRow.appendChild(span);
+		});
+}
+
+// ─────────────────────────────────────────────────────────
+// Page rendering
+// ─────────────────────────────────────────────────────────
+function renderPage(idx) {
+	currentPageIndex = idx;
+	const page = currentResults[idx];
+	if (!page) return;
+
+	textContent.textContent = page.text || "";
+
+	htmlFrame.setAttribute("srcdoc", page.html ||
+		"<p style='font-family:sans-serif;padding:1em;color:#888;'>HTML 出力がありません。</p>");
+
+	if (page.layout_preview_b64) {
+		layoutImg.src = `data:image/jpeg;base64,${page.layout_preview_b64}`;
+		layoutImg.classList.remove("hidden");
+		layoutNone.classList.add("hidden");
+	} else {
+		layoutImg.classList.add("hidden");
+		layoutNone.classList.remove("hidden");
+	}
+
+	renderSummary(page.summary);
+	copyBtn.disabled = false;
+}
+
+function renderAllPages() {
+	currentPageIndex = -1;
+	textContent.textContent = currentResults.map(r => `[Page ${r.page}]\n${r.text || ""}`).join("\n\n") || "(結果なし)";
+	htmlFrame.setAttribute("srcdoc", "<p style='font-family:sans-serif;padding:1em;color:#888;'>ページを選択してください。</p>");
+	layoutImg.classList.add("hidden");
+	layoutNone.classList.remove("hidden");
+	summaryRow.innerHTML = "";
+	copyBtn.disabled = false;
+}
+
+// ─────────────────────────────────────────────────────────
+// HTML preview actions
+// ─────────────────────────────────────────────────────────
+document.getElementById("htmlExpandBtn").addEventListener("click", () => {
+	const page = currentPageIndex >= 0 ? currentResults[currentPageIndex] : null;
+	if (page && page.html) openHtmlLightbox(page.html);
+});
+
+document.getElementById("htmlCopyBtn").addEventListener("click", async () => {
+	const page = currentPageIndex >= 0 ? currentResults[currentPageIndex] : null;
+	const text = (page && page.html) ? page.html : "";
+	if (!text) return;
+	const btn = document.getElementById("htmlCopyBtn");
+	try { await navigator.clipboard.writeText(text); } catch(_) {}
+	btn.textContent = "コピー済み";
+	setTimeout(() => { btn.textContent = "HTML コピー"; }, 1200);
+});
+
+layoutImg.addEventListener("click", () => { if (layoutImg.src) openImageLightbox(layoutImg.src); });
+
+// ─────────────────────────────────────────────────────────
+// Copy (テキスト tab)
+// ─────────────────────────────────────────────────────────
+copyBtn.addEventListener("click", async () => {
+	const text = textContent.textContent || "";
+	try {
+		await navigator.clipboard.writeText(text);
+	} catch(_) {
+		const ta = document.createElement("textarea");
+		ta.value = text; ta.style.cssText = "position:fixed;opacity:0;";
+		document.body.appendChild(ta); ta.select();
+		try { document.execCommand("copy"); } finally { document.body.removeChild(ta); }
+	}
+	copyBtn.classList.add("copied");
+	copyBtn.textContent = "コピー済み";
+	if (copyTimer) clearTimeout(copyTimer);
+	copyTimer = setTimeout(() => {
+		copyBtn.classList.remove("copied");
+		copyBtn.textContent = "コピー";
+		copyTimer = null;
+	}, 1200);
+});
+
+// ─────────────────────────────────────────────────────────
+// Page selector
+// ─────────────────────────────────────────────────────────
+pageSelect.addEventListener("change", () => {
+	const v = pageSelect.value;
+	if (v === "all") { renderAllPages(); return; }
+	const idx = Number(v);
+	if (!isNaN(idx)) renderPage(idx);
+});
+
+// ─────────────────────────────────────────────────────────
+// Submit
+// ─────────────────────────────────────────────────────────
+form.addEventListener("submit", async e => {
+	e.preventDefault();
+	if (!fileInput.files || fileInput.files.length === 0) {
+		alert("ファイルを選択してください。");
+		return;
+	}
+
+	const rid = genId();
+	activeRequestId = rid;
+
+	const fd = new FormData();
+	fd.append("file",           fileInput.files[0]);
+	fd.append("dpi",            document.getElementById("dpi").value);
+	fd.append("linebreak_mode", document.getElementById("linebreak_mode").value);
+	fd.append("request_id",     rid);
+
+	currentResults = [];
+	currentPageIndex = 0;
+
+	setBusy(true, "送信中...");
+	resultPanel.classList.remove("hidden");
+	pagePickerWrap.classList.add("hidden");
+	summaryRow.innerHTML = "";
+	textContent.textContent = "解析中... しばらくお待ちください。";
+	htmlFrame.setAttribute("srcdoc", "");
+	layoutImg.classList.add("hidden");
+	layoutNone.classList.add("hidden");
+	copyBtn.disabled = true;
+
+	const lbEl = document.getElementById("linebreak_mode");
+	const lbLabel = lbEl.options[lbEl.selectedIndex].text;
+	document.getElementById("tagLinebreak").textContent = `改行: ${lbLabel}`;
+	document.getElementById("tagPages").textContent     = "pages: -";
+	document.getElementById("tagDevice").textContent    = "device: -";
+
+	startPolling(rid);
+
+	try {
+		const res = await fetch("/api/analyze", { method: "POST", body: fd });
+		const payload = await res.json();
+		stopPolling();
+		activeRequestId = null;
+
+		if (!res.ok) throw new Error(payload.detail || "API error");
+
+		currentResults = Array.isArray(payload.results) ? payload.results : [];
+
+		document.getElementById("tagLinebreak").textContent = `改行: ${lbLabel}`;
+		document.getElementById("tagPages").textContent     = `pages: ${payload.page_count || 0}`;
+		document.getElementById("tagDevice").textContent    = `device: ${payload.device || "-"}`;
+
+		if (currentResults.length === 0) {
+			textContent.textContent = payload.state === "canceled" ? "中断しました。" : "結果が空です。";
+			setBusy(false, payload.state === "canceled" ? "中断" : "完了");
+			return;
+		}
+
+		pageSelect.innerHTML = "";
+		if (currentResults.length > 1) {
+			const all = document.createElement("option");
+			all.value = "all"; all.textContent = "ALL";
+			pageSelect.appendChild(all);
+			currentResults.forEach((r, i) => {
+				const opt = document.createElement("option");
+				opt.value = String(i); opt.textContent = `Page ${r.page}`;
+				pageSelect.appendChild(opt);
+			});
+			pageSelect.value = "0";
+			pagePickerWrap.classList.remove("hidden");
+		}
+
+		renderPage(0);
+		setBusy(false, payload.state === "canceled" ? "中断" : "完了");
+
+	} catch(err) {
+		stopPolling();
+		activeRequestId = null;
+		textContent.textContent = `エラー: ${err.message}`;
+		setBusy(false, "失敗");
+	}
+});
+
+// ─────────────────────────────────────────────────────────
+// Cancel
+// ─────────────────────────────────────────────────────────
+cancelBtn.addEventListener("click", async () => {
+	if (!activeRequestId) return;
+	cancelBtn.disabled = true;
+	try {
+		const res = await fetch(`/api/cancel/${encodeURIComponent(activeRequestId)}`, { method: "POST" });
+		const p = await res.json();
+		requestNote.textContent = p.message || "中断要求を受け付けました";
+	} catch(err) {
+		requestNote.textContent = `中断失敗: ${err.message}`;
+		if (activeRequestId) cancelBtn.disabled = false;
+	}
+});
+
+// ─────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────
+fetchStatus();
+		</script>
+	</body>
+</html>

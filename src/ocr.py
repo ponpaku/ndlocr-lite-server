@@ -74,6 +74,54 @@ def process_cascade(alllineobj,recognizer30,recognizer50,recognizer100,is_cascad
         resultlinesall=[t.pred_str for t in targetdflistall]
     return resultlinesall
 
+def process_cascade_batch(alllineobj, recognizer30, recognizer50, recognizer100, is_cascade=True):
+    """Batch-inference version of process_cascade.
+
+    Instead of calling recognizer.read() once per line image, each cascade
+    level batches all its line images into a single session.run() call.
+    This greatly reduces GPU kernel-launch overhead and improves throughput
+    on CUDA devices.  The cascade promotion logic (30→50→100) is unchanged.
+    """
+    targetdflist30 = []
+    targetdflist50 = []
+    targetdflist100 = []
+    for lineobj in alllineobj:
+        if lineobj.pred_char_cnt == 3 and is_cascade:
+            targetdflist30.append(lineobj)
+        elif lineobj.pred_char_cnt == 2 and is_cascade:
+            targetdflist50.append(lineobj)
+        else:
+            targetdflist100.append(lineobj)
+
+    targetdflistall = []
+
+    if targetdflist30:
+        results30 = recognizer30.read_batch([t.npimg for t in targetdflist30])
+        for lineobj, pred_str in zip(targetdflist30, results30):
+            if len(pred_str) >= 25:
+                targetdflist50.append(lineobj)
+            else:
+                lineobj.pred_str = pred_str
+                targetdflistall.append(lineobj)
+
+    if targetdflist50:
+        results50 = recognizer50.read_batch([t.npimg for t in targetdflist50])
+        for lineobj, pred_str in zip(targetdflist50, results50):
+            if len(pred_str) >= 45:
+                targetdflist100.append(lineobj)
+            else:
+                lineobj.pred_str = pred_str
+                targetdflistall.append(lineobj)
+
+    if targetdflist100:
+        results100 = recognizer100.read_batch([t.npimg for t in targetdflist100])
+        for lineobj, pred_str in zip(targetdflist100, results100):
+            lineobj.pred_str = pred_str
+            targetdflistall.append(lineobj)
+
+    return [t.pred_str for t in sorted(targetdflistall)]
+
+
 def get_detector(args):
     weights_path = args.det_weights
     classes_path = args.det_classes
@@ -86,7 +134,7 @@ def get_detector(args):
                       iou_threshold=args.det_iou_threshold,
                       device=args.device)
     return detector
-def get_recognizer(args,weights_path=None):
+def get_recognizer(args, weights_path=None, max_batch: int = 0):
     if weights_path is None:
         weights_path = args.rec_weights
     classes_path = args.rec_classes
@@ -98,8 +146,8 @@ def get_recognizer(args,weights_path=None):
     with open(classes_path,encoding="utf-8") as f:
         charobj=safe_load(f)
     charlist=list(charobj["model"]["charset_train"])
-    
-    recognizer = PARSEQ(model_path=weights_path,charlist=charlist,device=args.device)
+
+    recognizer = PARSEQ(model_path=weights_path, charlist=charlist, device=args.device, max_batch=max_batch)
     return recognizer
 
 

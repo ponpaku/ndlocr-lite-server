@@ -3,30 +3,26 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ndlocr-lite"
+name = "ndlocr-lite-server"
 version = "1.0.0"
-description = "NDLOCR-Lite CLI Application"
+description = "NDLOCR-Lite Web OCR Server"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "flet==0.27.6",
-    "dill==0.3.8",
     "lxml==5.4.0",
     "networkx==3.3",
-    "onnxruntime==1.23.2",
+    "onnxruntime-gpu==1.23.2",
     "pillow==12.1.1",
     "ordered-set==4.1.0",
     "protobuf==6.31.1",
-    "pyparsing==3.1.2",
     "PyYAML==6.0.1",
     "tqdm==4.66.4",
-    "reportlab==4.2.5",
     "pypdfium2==4.30.0",
-    "numpy==2.2.2"
+    "numpy==2.2.2",
+    "fastapi==0.111.0",
+    "uvicorn==0.29.0",
+    "python-dotenv==1.0.1"
 ]
-
-[project.scripts]
-ndlocr-lite = "ocr:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
