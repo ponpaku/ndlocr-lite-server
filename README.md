@@ -30,23 +30,25 @@ bash run.sh
 
 ## 設定
 
-`.env.example` を `.env` にコピーして編集してください。
+`config.toml.example` を `config.toml` にコピーして編集してください（run スクリプトが自動でコピーします）。
 
 ```bash
-cp .env.example .env
+cp config.toml.example config.toml
 ```
 
-| 変数 | デフォルト | 説明 |
+| キー | デフォルト | 説明 |
 |------|-----------|------|
-| `NDLOCR_HOST` | `127.0.0.1` | 待受ホスト（外部公開時は `0.0.0.0`） |
-| `NDLOCR_PORT` | `7860` | 待受ポート |
-| `NDLOCR_DEVICE` | `auto` | `auto` / `cuda` / `cpu` |
-| `NDLOCR_PAGE_WORKERS` | `2` | PDF 並列処理ページ数 |
-| `NDLOCR_MAX_BATCH` | `16` | PARSEQ バッチサイズ上限（VRAM 使用量に影響） |
-| `NDLOCR_RELOAD` | `never` | セッション解放モード：`never` / `always` / `auto` |
-| `NDLOCR_RELOAD_THRESHOLD_GB` | `0` | `auto` 時のリロード閾値 GB（0 = 無効） |
+| `server.host` | `"127.0.0.1"` | 待受ホスト（外部公開時は `"0.0.0.0"`） |
+| `server.port` | `7860` | 待受ポート |
+| `runtime.package` | `"gpu"` | インストールするパッケージ：`"gpu"` / `"directml"` / `"cpu"`（変更時は `.venv` を削除して再実行） |
+| `runtime.device` | `"auto"` | `"auto"`（CUDA→DirectML→CPU）/ `"cuda"` / `"directml"` / `"cpu"` |
+| `processing.page_workers` | `2` | PDF 並列処理ページ数 |
+| `processing.max_batch` | `16` | PARSEQ バッチサイズ上限（VRAM 使用量に影響） |
+| `vram.reload` | `"never"` | セッション解放モード：`"never"` / `"always"` / `"auto"` |
+| `vram.reload_threshold_gb` | `0.0` | `"auto"` 時のリロード閾値 GB（0 = 無効） |
+| `cpu.intra_op_threads` | `1` | CPU モード時のスレッド数（`-1` で onnxruntime 自動） |
 
-GPU（CUDA）を使用する場合は `requirements.txt` のまま（`onnxruntime-gpu`）でセットアップしてください。CPU のみの環境では `onnxruntime-gpu` を `onnxruntime` に置き換えてインストールしてください。
+`runtime.package` に応じた requirements ファイルが自動的に選択されます（`requirements-gpu.txt` / `requirements-directml.txt` / `requirements-cpu.txt`）。
 
 ---
 

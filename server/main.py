@@ -50,11 +50,31 @@ from io import BytesIO
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
-# Load .env before reading any os.environ values.
-# Search order: server/.env → repo root .env
-from dotenv import load_dotenv as _load_dotenv
-_load_dotenv(Path(__file__).resolve().parent / ".env")
-_load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+# ---------------------------------------------------------------------------
+# Config loader (config.toml)
+# ---------------------------------------------------------------------------
+def _load_config() -> dict:
+    """Load config.toml from the repository root.  Returns empty dict on failure."""
+    cfg_path = Path(__file__).resolve().parents[1] / "config.toml"
+    if not cfg_path.exists():
+        print(f"[config] config.toml not found at {cfg_path} – using defaults", flush=True)
+        return {}
+    try:
+        try:
+            import tomllib  # Python 3.11+
+        except ImportError:
+            import tomli as tomllib  # type: ignore[no-redef]
+        with open(cfg_path, "rb") as _f:
+            return tomllib.load(_f)
+    except Exception as e:
+        print(f"[config] Failed to load config.toml: {e} – using defaults", flush=True)
+        return {}
+
+_cfg = _load_config()
+
+def _c(section: str, key: str, default):
+    """Get a value from config.toml with a fallback default."""
+    return _cfg.get(section, {}).get(key, default)
 
 import numpy as np
 import uvicorn
@@ -88,39 +108,17 @@ _template_dir = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(_template_dir))
 
 # ---------------------------------------------------------------------------
-# Config (resolved from .env / environment variables)
+# Config (resolved from config.toml)
 # ---------------------------------------------------------------------------
-# Server binding
-SERVER_HOST: str = os.environ.get("NDLOCR_HOST", "127.0.0.1")
-SERVER_PORT: int = int(os.environ.get("NDLOCR_PORT", "7860"))
-
-# Device: "auto" | "cuda" | "cpu"
-DEVICE_OVERRIDE: str = os.environ.get("NDLOCR_DEVICE", "auto").lower()
-
-# Number of PDF pages processed concurrently.
-# Also determines the size of the DEIM detector pool.
-MAX_PAGE_WORKERS: int = int(os.environ.get("NDLOCR_PAGE_WORKERS", "2"))
-
-# Batch inference for PARSEQ recognizers.
-# "auto"  → True when device=cuda, False when device=cpu
-# "true"  → always batch
-# "false" → always per-line (original behaviour)
-BATCH_INFERENCE_SETTING: str = os.environ.get("NDLOCR_BATCH_INFERENCE", "auto").lower()
-
-# Maximum number of line images per PARSEQ batch pass.
-# Larger values improve GPU throughput but increase VRAM usage significantly
-# because the fully-unrolled AR loop keeps all intermediate tensors in VRAM.
-# 0 = unlimited (not recommended for CUDA).
-MAX_PARSEQ_BATCH: int = int(os.environ.get("NDLOCR_MAX_BATCH", "16"))
-
-# VRAM management after each request.
-# never : セッションを解放しない（デフォルト。warmup済みなら推奨）
-# always: 毎リクエスト後に解放・再ロード（旧動作）
-# auto  : NDLOCR_VRAM_LIMIT_GB を超えたときだけ解放・再ロード
-RELOAD_MODE: str = os.environ.get("NDLOCR_RELOAD", "never").lower()
-
-# RELOAD_MODE=auto のときのリロード閾値 (GB)。この値を超えたリクエストの後にセッションを再ロードする。0 は無効。
-VRAM_RELOAD_THRESHOLD_GB: float = float(os.environ.get("NDLOCR_RELOAD_THRESHOLD_GB", "0"))
+SERVER_HOST: str             = _c("server",     "host",                "127.0.0.1")
+SERVER_PORT: int             = _c("server",     "port",                7860)
+DEVICE_OVERRIDE: str         = _c("runtime",    "device",              "auto").lower()
+MAX_PAGE_WORKERS: int        = _c("processing", "page_workers",        2)
+BATCH_INFERENCE_SETTING: str = _c("processing", "batch_inference",     "auto").lower()
+MAX_PARSEQ_BATCH: int        = _c("processing", "max_batch",           16)
+RELOAD_MODE: str             = _c("vram",       "reload",              "never").lower()
+VRAM_RELOAD_THRESHOLD_GB: float = _c("vram",    "reload_threshold_gb", 0.0)
+INTRA_OP_THREADS: int        = _c("cpu",        "intra_op_threads",    1)
 
 # ---------------------------------------------------------------------------
 # OCR engine (singleton with pre-loaded models)
@@ -142,11 +140,12 @@ class NDLOCREngine:
         recognizer instances are shared across all page workers.
     """
 
-    def __init__(self, src_dir: Path, device: str = "cpu", max_workers: int = MAX_PAGE_WORKERS, use_batch: bool = False, max_batch: int = 0) -> None:
+    def __init__(self, src_dir: Path, device: str = "cpu", max_workers: int = MAX_PAGE_WORKERS, use_batch: bool = False, max_batch: int = 0, intra_op_num_threads: int = 1) -> None:
         self.device = device
         self.max_workers = max_workers
         self.use_batch = use_batch
         self.max_batch = max_batch
+        self.intra_op_num_threads = intra_op_num_threads
 
         class _Args:
             pass
@@ -162,6 +161,7 @@ class NDLOCREngine:
         args.rec_weights         = str(src_dir / "model" / "parseq-ndl-16x768-100-tiny-165epoch-tegaki2.onnx")
         args.rec_classes         = str(src_dir / "config" / "NDLmoji.yaml")
         args.device              = device
+        args.intra_op_num_threads = intra_op_num_threads
 
         print("[NDLOCREngine] Loading PARSEQ recognizers …", flush=True)
         self.recognizer100 = _ndlocr.get_recognizer(args=args, max_batch=max_batch)
@@ -618,13 +618,21 @@ def _startup() -> None:
     global _engine
     _setup_cuda_dll_paths()
 
-    if DEVICE_OVERRIDE in ("cuda", "cpu"):
+    if DEVICE_OVERRIDE in ("cuda", "cpu", "directml"):
         device = DEVICE_OVERRIDE
         if device == "cuda" and not _check_cuda():
             print("[startup] NDLOCR_DEVICE=cuda but CUDA unavailable – falling back to cpu", flush=True)
             device = "cpu"
-    else:
-        device = "cuda" if _check_cuda() else "cpu"
+        elif device == "directml" and not _check_directml():
+            print("[startup] NDLOCR_DEVICE=directml but DirectML unavailable – falling back to cpu", flush=True)
+            device = "cpu"
+    else:  # auto: cuda → directml → cpu
+        if _check_cuda():
+            device = "cuda"
+        elif _check_directml():
+            device = "directml"
+        else:
+            device = "cpu"
 
     if BATCH_INFERENCE_SETTING == "true":
         use_batch = True
@@ -636,11 +644,12 @@ def _startup() -> None:
     print(
         f"[startup] device={device}, port={SERVER_PORT}, "
         f"MAX_PAGE_WORKERS={MAX_PAGE_WORKERS}, batch_inference={use_batch}, "
-        f"max_batch={MAX_PARSEQ_BATCH if use_batch else 'N/A'}",
+        f"max_batch={MAX_PARSEQ_BATCH if use_batch else 'N/A'}, "
+        f"intra_op_threads={INTRA_OP_THREADS}",
         flush=True,
     )
     # Raises on missing model files – server will not start
-    _engine = NDLOCREngine(src_dir=_src_dir, device=device, max_workers=MAX_PAGE_WORKERS, use_batch=use_batch, max_batch=MAX_PARSEQ_BATCH)
+    _engine = NDLOCREngine(src_dir=_src_dir, device=device, max_workers=MAX_PAGE_WORKERS, use_batch=use_batch, max_batch=MAX_PARSEQ_BATCH, intra_op_num_threads=INTRA_OP_THREADS)
 
 
 # ---------------------------------------------------------------------------
@@ -654,6 +663,15 @@ _request_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ocr-re
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _check_directml() -> bool:
+    """Return True when DmlExecutionProvider is available (onnxruntime-directml installed)."""
+    try:
+        import onnxruntime as ort
+        return "DmlExecutionProvider" in ort.get_available_providers()
+    except Exception:
+        return False
+
 
 def _check_cuda() -> bool:
     """Return True only when CUDA is actually usable at runtime.

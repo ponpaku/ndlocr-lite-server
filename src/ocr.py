@@ -132,7 +132,8 @@ def get_detector(args):
                       score_threshold=args.det_score_threshold,
                       conf_threshold=args.det_conf_threshold,
                       iou_threshold=args.det_iou_threshold,
-                      device=args.device)
+                      device=args.device,
+                      intra_op_num_threads=getattr(args, "intra_op_num_threads", 1))
     return detector
 def get_recognizer(args, weights_path=None, max_batch: int = 0):
     if weights_path is None:
@@ -147,7 +148,9 @@ def get_recognizer(args, weights_path=None, max_batch: int = 0):
         charobj=safe_load(f)
     charlist=list(charobj["model"]["charset_train"])
 
-    recognizer = PARSEQ(model_path=weights_path, charlist=charlist, device=args.device, max_batch=max_batch)
+    recognizer = PARSEQ(model_path=weights_path, charlist=charlist, device=args.device,
+                        max_batch=max_batch,
+                        intra_op_num_threads=getattr(args, "intra_op_num_threads", 1))
     return recognizer
 
 

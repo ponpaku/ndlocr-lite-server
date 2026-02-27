@@ -14,11 +14,13 @@ class DEIM:
                  score_threshold: float = 0.1,
                  conf_threshold: float = 0.1,
                  iou_threshold: float = 0.4,
-                 device: str = "CPU") -> None:
+                 device: str = "CPU",
+                 intra_op_num_threads: int = 1) -> None:
         self.model_path = model_path
         self.class_mapping_path = class_mapping_path
         self.image_width, self.image_height = original_size
         self.device = device
+        self.intra_op_num_threads = intra_op_num_threads
         self.score_threshold = score_threshold
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
@@ -30,16 +32,24 @@ class DEIM:
     def create_session(self) -> None:
         opt_session = onnxruntime.SessionOptions()
         opt_session.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-        #opt_session.execution_mode = onnxruntime.ExecutionMode.ORT_PARALLEL
-        #ExecutionMode.ORT_PARALLEL
-        #opt_session.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
         providers = ['CPUExecutionProvider']
-        if self.device.casefold() == "cuda":
+        dev = self.device.casefold()
+        if dev == "cpu":
+            t = self.intra_op_num_threads
+            if t >= 0:
+                opt_session.intra_op_num_threads = t
+                opt_session.inter_op_num_threads = 1
+        elif dev == "cuda":
             providers = [
                 ('CUDAExecutionProvider', {'arena_extend_strategy': 'kSameAsRequested'}),
                 'CPUExecutionProvider',
             ]
-        session = onnxruntime.InferenceSession(self.model_path,opt_session, providers=providers)
+        elif dev == "directml":
+            providers = [
+                'DmlExecutionProvider',
+                'CPUExecutionProvider',
+            ]
+        session = onnxruntime.InferenceSession(self.model_path, opt_session, providers=providers)
         self.session = session
         self.model_inputs = self.session.get_inputs()
         self.input_names = [self.model_inputs[i].name for i in range(len(self.model_inputs))]

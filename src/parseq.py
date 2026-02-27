@@ -12,17 +12,19 @@ class PARSEQ:
                  charlist: [str],
                  original_size: Tuple[int, int] = (384, 32),
                  device: str = "CPU",
-                 max_batch: int = 0) -> None:
+                 max_batch: int = 0,
+                 intra_op_num_threads: int = 1) -> None:
         self.model_path = model_path
         self.charlist = charlist
         self.max_batch = max_batch  # 0 = unlimited
+        self.intra_op_num_threads = intra_op_num_threads
 
         self.device = device
         self.image_width, self.image_height = original_size
         self.create_session()
 
-    def _dynamic_path(self) -> str:
-        """Return the *_dynamic.onnx path if it exists, else the original path."""
+    def _preferred_path(self) -> str:
+        """Return *_dynamic.onnx if it exists, else the original path."""
         p = Path(self.model_path)
         dyn = p.with_name(p.stem + "_dynamic" + p.suffix)
         return str(dyn) if dyn.exists() else self.model_path
@@ -30,20 +32,25 @@ class PARSEQ:
     def create_session(self) -> None:
         opt_session = onnxruntime.SessionOptions()
         opt_session.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-        #opt_session.enable_cpu_mem_arena = False
-        #opt_session.execution_mode = onnxruntime.ExecutionMode.ORT_PARALLEL
-        #opt_session.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
         providers = ['CPUExecutionProvider']
-        if self.device.casefold() == "cpu":
-            opt_session.intra_op_num_threads = 1
-            opt_session.inter_op_num_threads = 1
-        elif self.device.casefold() == "cuda":
+        dev = self.device.casefold()
+        if dev == "cpu":
+            t = self.intra_op_num_threads
+            if t >= 0:
+                opt_session.intra_op_num_threads = t
+                opt_session.inter_op_num_threads = 1
+        elif dev == "cuda":
             providers = [
                 ('CUDAExecutionProvider', {'arena_extend_strategy': 'kSameAsRequested'}),
                 'CPUExecutionProvider',
             ]
-        # Prefer the dynamic-batch model when it exists
-        load_path = self._dynamic_path()
+        elif dev == "directml":
+            providers = [
+                'DmlExecutionProvider',
+                'CPUExecutionProvider',
+            ]
+        # Prefer the best available model variant
+        load_path = self._preferred_path()
         session = onnxruntime.InferenceSession(load_path, opt_session, providers=providers)
         self.session = session
         self.model_inputs = self.session.get_inputs()
@@ -52,7 +59,7 @@ class PARSEQ:
         self.model_output = self.session.get_outputs()
         self.output_names = [self.model_output[i].name for i in range(len(self.model_output))]
         self.input_height, self.input_width = self.input_shape[2:]
-        self._has_dynamic_batch = (load_path != self.model_path)
+        self._has_dynamic_batch = "_dynamic" in Path(load_path).stem
         if self.device.casefold() == "cuda" and self._has_dynamic_batch:
             self._warmup()
 
