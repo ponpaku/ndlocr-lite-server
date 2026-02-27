@@ -122,8 +122,6 @@ class DEIM:
                 "pred_char_count":char_count,
                 "class_name": self.classes[class_index]#"line_main"
             })
-        print(len(detections))
-        #print(char_counts)
         return detections
     
     def get_label_name(self, class_id: int) -> str:

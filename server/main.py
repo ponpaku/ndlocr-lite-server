@@ -353,7 +353,119 @@ class NDLOCREngine:
         }
 
     # ------------------------------------------------------------------
-    # Batch (parallel pages)
+    # Detection-only phase (used by cross-page batch pipeline)
+    # ------------------------------------------------------------------
+
+    def _run_detection(self, img: Image.Image) -> dict:
+        """Run DEIM detection on one page and extract line crops.
+
+        Returns a dict consumed by _build_page_result_from_det().
+        Separating detection from recognition allows all pages in a chunk
+        to be detected in parallel, then their line images batched together
+        into a single cascade call.
+        """
+        npimage = np.array(img.convert("RGB"))
+        img_h, img_w = npimage.shape[:2]
+
+        detector = self._detector_pool.get()
+        try:
+            detections = detector.detect(npimage)
+            classeslist = list(detector.classes.values())
+            layout_pil = detector.draw_detections(npimage.copy(), detections)
+        finally:
+            self._detector_pool.put(detector)
+
+        summary: Dict[str, int] = {}
+        for det in detections:
+            cn = det.get("class_name", f"class_{det['class_index']}")
+            summary[cn] = summary.get(cn, 0) + 1
+
+        resultobj = [{0: []}, {i: [] for i in range(17)}]
+        for det in detections:
+            xmin, ymin, xmax, ymax = det["box"]
+            if det["class_index"] == 0:
+                resultobj[0][0].append([xmin, ymin, xmax, ymax])
+            resultobj[1][det["class_index"]].append(
+                [xmin, ymin, xmax, ymax, det["confidence"]]
+            )
+
+        xmlstr = _convert_to_xml_string3(img_w, img_h, "input.png", classeslist, resultobj)
+        xmlstr = "<OCRDATASET>" + xmlstr + "</OCRDATASET>"
+        root = ET.fromstring(xmlstr)
+        _eval_xml(root, logger=None)
+
+        alllineobj: list = []
+        tatelinecnt = 0
+        for idx, lineelem in enumerate(root.findall(".//LINE")):
+            xmin   = int(lineelem.get("X"))
+            ymin   = int(lineelem.get("Y"))
+            line_w = int(lineelem.get("WIDTH"))
+            line_h = int(lineelem.get("HEIGHT"))
+            try:
+                pred_char_cnt = float(lineelem.get("PRED_CHAR_CNT"))
+            except Exception:
+                pred_char_cnt = 100.0
+            if line_h > line_w:
+                tatelinecnt += 1
+            lineimg = npimage[ymin:ymin + line_h, xmin:xmin + line_w, :]
+            alllineobj.append(_ndlocr.RecogLine(lineimg, idx, pred_char_cnt))
+
+        return {
+            "img_w": img_w,
+            "img_h": img_h,
+            "summary": summary,
+            "layout_b64": _encode_pil_b64(layout_pil),
+            "root": root,
+            "alllineobj": alllineobj,
+            "tatelinecnt": tatelinecnt,
+        }
+
+    def _build_page_result_from_det(self, det: dict, page_lines: List[str]) -> dict:
+        """Assemble a page result dict from detection data and recognized lines."""
+        root = det["root"]
+        alllineobj = det["alllineobj"]
+        alllinecnt = len(alllineobj)
+        tatelinecnt = det["tatelinecnt"]
+
+        if alllinecnt == 0:
+            return {
+                "text": "",
+                "blocks": [],
+                "summary": det["summary"],
+                "layout_preview_b64": det["layout_b64"],
+                "html": "",
+            }
+
+        blocks: list = []
+        for idx, lineelem in enumerate(root.findall(".//LINE")):
+            xmin   = int(lineelem.get("X"))
+            ymin   = int(lineelem.get("Y"))
+            line_w = int(lineelem.get("WIDTH"))
+            line_h = int(lineelem.get("HEIGHT"))
+            btype  = _ORG_NAME_TO_CLASS.get(lineelem.get("TYPE", ""), "line_main")
+            text_str = page_lines[idx] if idx < len(page_lines) else ""
+            blocks.append({
+                "id": f"line-{idx}",
+                "type": btype,
+                "order": idx,
+                "box": [xmin, ymin, xmin + line_w, ymin + line_h],
+                "text": text_str,
+                "is_vertical": line_h > line_w,
+            })
+
+        is_vertical = tatelinecnt / alllinecnt > 0.5
+        text = "\n".join(page_lines)
+
+        return {
+            "text": text,
+            "blocks": blocks,
+            "summary": det["summary"],
+            "layout_preview_b64": det["layout_b64"],
+            "html": _build_html(blocks, is_vertical=is_vertical),
+        }
+
+    # ------------------------------------------------------------------
+    # Batch (parallel pages + cross-page cascade batching)
     # ------------------------------------------------------------------
 
     def infer_pages(
@@ -362,31 +474,79 @@ class NDLOCREngine:
         progress_cb: Callable[[int, int], None],
         cancel_fn: Callable[[], bool],
     ) -> List[Tuple[dict, Optional[str]]]:
-        """
-        Process *images* in parallel (up to MAX_PAGE_WORKERS at a time).
+        """Process *images* with cross-page cascade batching.
+
+        Phase 1 – DEIM detection: all pages run in parallel via the thread
+                  pool (one DEIM instance per worker).
+        Phase 2 – Cascade recognition: line images from ALL pages in the
+                  chunk are combined into a single process_cascade_batch()
+                  call.  This maximises the batch size seen by PARSEQ and
+                  reduces the number of session.run() invocations.
+        Phase 3 – Assembly: per-page result dicts are built from the
+                  detection data and the recognised lines.
+
         Returns a list of ``(result_dict, error_or_None)`` in page order.
         """
         total = len(images)
-        results: List[Optional[Tuple[dict, Optional[str]]]] = [None] * total
+        detection_data: List[Optional[dict]] = [None] * total
 
-        future_to_idx: dict = {}
+        # Phase 1: parallel DEIM detection
+        det_futures: dict = {}
         for i, img in enumerate(images):
             if cancel_fn():
                 break
-            future = self._page_executor.submit(self.infer_image, img)
-            future_to_idx[future] = i
+            future = self._page_executor.submit(self._run_detection, img)
+            det_futures[future] = i
 
-        done_count = 0
-        for future in as_completed(future_to_idx):
-            idx = future_to_idx[future]
+        for future in as_completed(det_futures):
+            idx = det_futures[future]
             try:
-                results[idx] = (future.result(), None)
+                detection_data[idx] = future.result()
             except Exception as exc:
-                results[idx] = (dict(_EMPTY_PAGE_DICT), str(exc))
+                detection_data[idx] = {"error": str(exc)}
+
+        # Phase 2: cross-page cascade batch
+        # Assign global line indices so sorted() in process_cascade_batch
+        # returns results in the correct order across pages.
+        all_lineobjs: list = []
+        page_offsets: List[Tuple[int, int]] = []  # (offset, count) per page
+        for det in detection_data:
+            if det and "error" not in det:
+                offset = len(all_lineobjs)
+                for lineobj in det["alllineobj"]:
+                    lineobj.idx = len(all_lineobjs)
+                    all_lineobjs.append(lineobj)
+                page_offsets.append((offset, len(det["alllineobj"])))
+            else:
+                page_offsets.append((len(all_lineobjs), 0))
+
+        if all_lineobjs:
+            if self.use_batch:
+                all_results = _process_cascade_batch(
+                    all_lineobjs, self.recognizer30, self.recognizer50, self.recognizer100
+                )
+            else:
+                all_results = _ndlocr.process_cascade(
+                    all_lineobjs, self.recognizer30, self.recognizer50, self.recognizer100
+                )
+        else:
+            all_results = []
+
+        # Phase 3: assemble per-page results
+        results: List[Optional[Tuple[dict, Optional[str]]]] = [None] * total
+        done_count = 0
+        for i, (det, (offset, count)) in enumerate(zip(detection_data, page_offsets)):
+            if det is None:
+                results[i] = (dict(_EMPTY_PAGE_DICT), "中断されました")
+            elif "error" in det:
+                results[i] = (dict(_EMPTY_PAGE_DICT), det["error"])
+            else:
+                page_lines = all_results[offset:offset + count] if all_results else []
+                results[i] = (self._build_page_result_from_det(det, page_lines), None)
             done_count += 1
             progress_cb(done_count, total)
 
-        # Fill slots skipped due to cancellation
+        # Fill pages skipped due to cancellation
         for i in range(total):
             if results[i] is None:
                 results[i] = (dict(_EMPTY_PAGE_DICT), "中断されました")
@@ -779,10 +939,8 @@ def _process_sync(
             _engine.reload_sessions()
         if suffix == ".pdf":
             _progress[rid]["message"] = "PDF を変換中..."
-            t0 = time.perf_counter()
             total = 0
             page_offset = 0
-            page_times: List[float] = []
 
             # Stream pages MAX_PAGE_WORKERS at a time to avoid loading the
             # entire PDF into RAM at once.
@@ -809,13 +967,20 @@ def _process_sync(
                     _chunk_offset = page_offset
 
                     def on_progress(done: int, _total: int, _off: int = _chunk_offset) -> None:
-                        page_times.append(time.perf_counter())
-                        elapsed = page_times[-1] - (page_times[-2] if len(page_times) > 1 else t0)
                         abs_done = _off + done
-                        print(f"[OCR]   page {abs_done}/{total}  {elapsed:.2f}s", flush=True)
                         _progress[rid]["message"] = f"ページ {abs_done}/{total} 完了..."
 
+                    t_chunk = time.perf_counter()
                     chunk_raw = _engine.infer_pages(chunk, on_progress, is_canceled)
+                    elapsed = time.perf_counter() - t_chunk
+                    n_chunk = len(chunk)
+                    p_start = page_offset + 1
+                    p_end   = page_offset + n_chunk
+                    print(
+                        f"[OCR]   pages {p_start}–{p_end}/{total}"
+                        f"  {elapsed:.2f}s  ({elapsed/n_chunk:.2f}s/page)",
+                        flush=True,
+                    )
                     for i, (result_dict, error) in enumerate(chunk_raw):
                         raw = result_dict.get("text", "") if not error else ""
                         _blocks = result_dict.get("blocks") if not error else None
