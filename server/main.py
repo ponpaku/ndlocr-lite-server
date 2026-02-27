@@ -59,7 +59,6 @@ import numpy as np
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
 
@@ -84,9 +83,7 @@ from ocr import process_cascade_batch as _process_cascade_batch
 # ---------------------------------------------------------------------------
 app = FastAPI()
 
-_static_dir = Path(__file__).resolve().parent / "static"
 _template_dir = Path(__file__).resolve().parent / "templates"
-app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 templates = Jinja2Templates(directory=str(_template_dir))
 
 # ---------------------------------------------------------------------------
