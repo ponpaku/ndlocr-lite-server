@@ -53,6 +53,24 @@ class PARSEQ:
         self.output_names = [self.model_output[i].name for i in range(len(self.model_output))]
         self.input_height, self.input_width = self.input_shape[2:]
         self._has_dynamic_batch = (load_path != self.model_path)
+        if self.device.casefold() == "cuda" and self._has_dynamic_batch:
+            self._warmup()
+
+    def _warmup(self) -> None:
+        """Pre-expand the CUDA memory arena for every bucket size.
+
+        Runs a dummy session.run() for each power-of-2 batch size up to
+        max_batch so that all arena allocations happen at startup rather than
+        gradually during the first PDF request.
+        """
+        cap = self.max_batch if self.max_batch > 0 else 32
+        H, W = self.input_height, self.input_width
+        b = 1
+        while b <= cap:
+            dummy = np.zeros((b, 3, H, W), dtype=np.float32)
+            self.session.run(self.output_names, {self.input_names[0]: dummy})
+            b *= 2
+        print(f"[PARSEQ] warmup done ({Path(self.model_path).stem}, cuda, buckets 1–{cap})", flush=True)
 
     def postprocess(self, outputs):
         predictions = np.squeeze(outputs).T
