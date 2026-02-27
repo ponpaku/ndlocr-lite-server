@@ -51,6 +51,8 @@ cp config.toml.example config.toml
 
 requirements ファイルは OS に応じて自動選択されます（Windows/Linux: `requirements-gpu.txt`、macOS: `requirements-cpu.txt`）。
 
+API リファレンス・設定リファレンス・アーキテクチャの詳細は **[dev-doc.md](./dev-doc.md)** を参照してください。
+
 ---
 
 ## このフォークについて
