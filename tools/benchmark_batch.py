@@ -18,9 +18,10 @@ np.random.seed(0)
 N = 16
 imgs = [np.random.randint(0, 255, (16, 256, 3), dtype=np.uint8) for _ in range(N)]
 
-def bench(device, n_warmup=2, n_repeat=5):
-    p = PARSEQ(model_path, charlist, original_size=(256, 16), device=device)
-    print(f"\n[{device}] dynamic={p._has_dynamic_batch}")
+def bench(device, n_warmup=2, n_repeat=5, use_fp16=False):
+    p = PARSEQ(model_path, charlist, original_size=(256, 16), device=device, use_fp16=use_fp16)
+    label = f"{device}" + (" fp16" if use_fp16 else " fp32")
+    print(f"\n[{label}] dynamic={p._has_dynamic_batch}, model={__import__('pathlib').Path(p._preferred_path()).name}")
 
     # warmup
     for _ in range(n_warmup):
@@ -42,10 +43,11 @@ def bench(device, n_warmup=2, n_repeat=5):
     print(f"  Batch     ({N} imgs): {bat_t*1000:.1f} ms  ({bat_t/N*1000:.1f} ms/img)")
     print(f"  Speedup: {seq_t/bat_t:.2f}x")
 
-bench("CPU")
+bench("CPU", use_fp16=False)
 
 providers = ort.get_available_providers()
 if "CUDAExecutionProvider" in providers:
-    bench("CUDA")
+    bench("CUDA", use_fp16=False)
+    bench("CUDA", use_fp16=True)
 else:
     print("\nCUDA not available, skipping CUDA benchmark")

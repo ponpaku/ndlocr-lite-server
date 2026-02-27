@@ -150,7 +150,8 @@ def get_recognizer(args, weights_path=None, max_batch: int = 0):
 
     recognizer = PARSEQ(model_path=weights_path, charlist=charlist, device=args.device,
                         max_batch=max_batch,
-                        intra_op_num_threads=getattr(args, "intra_op_num_threads", 1))
+                        intra_op_num_threads=getattr(args, "intra_op_num_threads", 1),
+                        use_fp16=getattr(args, "use_fp16", False))
     return recognizer
 
 

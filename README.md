@@ -6,7 +6,7 @@
 
 - **PDF 対応**: PDF を直接アップロードすると自動的に画像化して OCR 処理
 - **Web サーバー**: ブラウザから操作できる Web UI と JSON REST API
-- **PARSEQ バッチ推論最適化**: CUDA 環境で最大 **3.1 倍**の高速化
+- **PARSEQ バッチ推論最適化**: CUDA 環境で最大 **3.7 倍**の高速化（動的バッチ + FP16）
 
 元のリポジトリの情報（モデル詳細・OCR 結果例・学習手順・ライセンス等）は [ndl-lab/ndlocr-lite](https://github.com/ndl-lab/ndlocr-lite) を参照してください。
 
@@ -44,6 +44,7 @@ cp config.toml.example config.toml
 | `processing.page_workers` | `2` | PDF 並列処理ページ数 |
 | `processing.batch_inference` | `"auto"` | PARSEQ バッチ推論：`"auto"`（CUDA のみ有効）/ `"true"` / `"false"` |
 | `processing.max_batch` | `16` | PARSEQ バッチサイズ上限（VRAM 使用量に影響） |
+| `processing.precision` | `"auto"` | PARSEQ 推論精度：`"auto"`（CUDA→fp16、CPU→fp32）/ `"fp16"` / `"fp32"` |
 | `vram.reload` | `"never"` | セッション解放モード：`"never"` / `"always"` / `"auto"` |
 | `vram.reload_threshold_gb` | `0.0` | `"auto"` 時のリロード閾値 GB（0 = 無効） |
 | `cpu.intra_op_threads` | `1` | CPU モード時のスレッド数（`-1` で onnxruntime 自動） |
@@ -62,6 +63,7 @@ ndlocr-lite はデスクトップ GUI またはコマンドラインから使う
 - **PDF 対応**: PDF を直接受け付け、自動的にページ画像へ変換して OCR 処理
 - **ローカル Web サーバー**: ブラウザや外部ツールから HTTP 経由で OCR を利用できる環境の提供
 - **CUDA バッチ推論**: PARSEQ モデルの動的バッチ化による処理速度の向上
+- **FP16 推論**: PARSEQ ONNX モデルの FP16 変換（`tools/convert_fp16.py`）による追加高速化
 
 ### 加えた変更
 
@@ -134,19 +136,65 @@ python tools/patch_dynamic_batch_v2.py
 - 動的モデルが存在しない場合は従来の逐次処理にフォールバック
 - `max_batch` 上限を設けてバッチを分割し VRAM 消費を制限
 
+#### 4. PARSEQ FP16 対応（`tools/convert_fp16.py`）
+
+動的バッチ対応とは独立した、モデルの重みを FP32→FP16 に変換することによる追加高速化。
+
+**仕組み**
+
+`onnxconverter_common.float16.convert_float_to_float16(model, keep_io_types=True)` で `*_dynamic.onnx` の重みを FP16 化し `*_dynamic_fp16.onnx` を生成する。
+`keep_io_types=True` を指定することで入出力は FP32 のままとなり、前処理・後処理の変更は不要。
+NVIDIA Ampere 世代以降の GPU（RTX 30xx など）は Tensor Core により FP16 演算を FP32 の約 2 倍の速度で実行できる。
+
+**FP16 モデルの生成**
+
+`*_dynamic_fp16.onnx` はリポジトリに含まれており、クローン後すぐに利用可能。
+再生成する場合（モデルを差し替えた場合など）：
+
+```bash
+python tools/convert_fp16.py
+```
+
+**設定**
+
+`config.toml` の `processing.precision`：
+
+| 値 | 動作 |
+|----|------|
+| `"auto"` | CUDA なら FP16、CPU なら FP32（推奨） |
+| `"fp16"` | FP16 強制（CUDA + `*_dynamic_fp16.onnx` が必要） |
+| `"fp32"` | FP32 強制 |
+
+> **注意**: FP16 は動的バッチ（`*_dynamic.onnx`）と組み合わせて機能する。
+> CPU では FP16 の恩恵がなく、FP32 に自動フォールバックする。
+
 ### 結果
 
-| モデル | 動作確認済みバッチサイズ |
-|-------|----------------------|
-| parseq-ndl-16×256-30（`*_dynamic.onnx`） | 1〜32 |
-| parseq-ndl-16×384-50（`*_dynamic.onnx`） | 1〜32 |
-| parseq-ndl-16×768-100（`*_dynamic.onnx`） | 1〜32 |
+| モデル | fp32（`*_dynamic.onnx`） | fp16（`*_dynamic_fp16.onnx`） |
+|-------|------------------------|------------------------------|
+| parseq-ndl-16×256-30 | 1〜64 | 1〜64 |
+| parseq-ndl-16×384-50 | 1〜64 | 1〜64 |
+| parseq-ndl-16×768-100 | 1〜64 | 1〜64 |
 
 検証環境：Intel Core i7-14700K / NVIDIA GeForce RTX 3060 12GB
 
-| 環境 | 逐次処理 | バッチ処理（batch=16） | 高速化率 |
-|------|---------|----------------------|---------|
-| CPU  | 335 ms  | 257 ms               | 1.3 倍  |
-| CUDA | 160 ms  | 52 ms                | **3.1 倍** |
+**PARSEQ マイクロベンチマーク**（行画像 16 枚、`tools/benchmark_batch.py`）
 
-CUDA 環境では 1 枚あたりの処理時間が約 10 ms → 3.2 ms に短縮される。
+| 環境 | モード | 16 行あたり | 1 行あたり | 対 CPU 逐次比 |
+|------|-------|------------|-----------|--------------|
+| CPU  | 逐次処理 | 335 ms | 20.9 ms | 1.0× |
+| CPU  | バッチ推論 fp32（batch=16） | 257 ms | 16.1 ms | 1.3× |
+| CUDA | 逐次処理 | 160 ms | 10.0 ms | 2.1× |
+| CUDA | バッチ推論 fp32（batch=16） | 52 ms | 3.2 ms | **6.4×** |
+| CUDA | バッチ推論 fp16（batch=16）※ | ~43 ms | ~2.7 ms | **~7.8×** |
+
+※ fp16 は PDF 64 ページの全体処理時間（71 s vs fp32 86 s）から換算した推定値。
+
+**PDF 全体処理（64 ページ、page\_workers=5、max\_batch=64、CUDA）**
+
+| 精度 | 処理時間 | 高速化率（対 fp32） |
+|------|---------|-------------------|
+| FP32 | 86 s | 1.0× |
+| FP16 | 71 s | **1.21×** |
+
+2 つの最適化（動的バッチ + FP16）を組み合わせることで、CUDA 環境では CPU 逐次処理と比べて最大約 **3.7 倍**（CUDA バッチ内での比較）の高速化が得られる。

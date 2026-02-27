@@ -13,19 +13,30 @@ class PARSEQ:
                  original_size: Tuple[int, int] = (384, 32),
                  device: str = "CPU",
                  max_batch: int = 0,
-                 intra_op_num_threads: int = 1) -> None:
+                 intra_op_num_threads: int = 1,
+                 use_fp16: bool = False) -> None:
         self.model_path = model_path
         self.charlist = charlist
         self.max_batch = max_batch  # 0 = unlimited
         self.intra_op_num_threads = intra_op_num_threads
+        self.use_fp16 = use_fp16
 
         self.device = device
         self.image_width, self.image_height = original_size
         self.create_session()
 
     def _preferred_path(self) -> str:
-        """Return *_dynamic.onnx if it exists, else the original path."""
+        """Return the best available model variant path.
+
+        Priority (CUDA + fp16):  *_dynamic_fp16.onnx > *_dynamic.onnx > original
+        Priority (CUDA + fp32):  *_dynamic.onnx > original
+        Priority (CPU):          *_dynamic.onnx > original  (fp16 no benefit on CPU)
+        """
         p = Path(self.model_path)
+        if self.device.casefold() == "cuda" and self.use_fp16:
+            fp16 = p.with_name(p.stem + "_dynamic_fp16" + p.suffix)
+            if fp16.exists():
+                return str(fp16)
         dyn = p.with_name(p.stem + "_dynamic" + p.suffix)
         return str(dyn) if dyn.exists() else self.model_path
 
@@ -72,7 +83,7 @@ class PARSEQ:
             dummy = np.zeros((b, 3, H, W), dtype=np.float32)
             self.session.run(self.output_names, {self.input_names[0]: dummy})
             b *= 2
-        print(f"[PARSEQ] warmup done ({Path(self.model_path).stem}, cuda, buckets 1–{cap})", flush=True)
+        print(f"[PARSEQ] warmup done ({Path(self.model_path).stem}, cuda, buckets 1-{cap})", flush=True)
 
     def postprocess(self, outputs):
         predictions = np.squeeze(outputs).T

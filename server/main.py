@@ -116,6 +116,7 @@ DEVICE_OVERRIDE: str         = _c("runtime",    "device",              "auto").l
 MAX_PAGE_WORKERS: int        = _c("processing", "page_workers",        2)
 BATCH_INFERENCE_SETTING: str = _c("processing", "batch_inference",     "auto").lower()
 MAX_PARSEQ_BATCH: int        = _c("processing", "max_batch",           16)
+PRECISION_SETTING: str       = _c("processing", "precision",           "auto").lower()
 RELOAD_MODE: str             = _c("vram",       "reload",              "never").lower()
 VRAM_RELOAD_THRESHOLD_GB: float = _c("vram",    "reload_threshold_gb", 0.0)
 INTRA_OP_THREADS: int        = _c("cpu",        "intra_op_threads",    1)
@@ -140,12 +141,13 @@ class NDLOCREngine:
         recognizer instances are shared across all page workers.
     """
 
-    def __init__(self, src_dir: Path, device: str = "cpu", max_workers: int = MAX_PAGE_WORKERS, use_batch: bool = False, max_batch: int = 0, intra_op_num_threads: int = 1) -> None:
+    def __init__(self, src_dir: Path, device: str = "cpu", max_workers: int = MAX_PAGE_WORKERS, use_batch: bool = False, max_batch: int = 0, intra_op_num_threads: int = 1, use_fp16: bool = False) -> None:
         self.device = device
         self.max_workers = max_workers
         self.use_batch = use_batch
         self.max_batch = max_batch
         self.intra_op_num_threads = intra_op_num_threads
+        self.use_fp16 = use_fp16
 
         class _Args:
             pass
@@ -162,6 +164,7 @@ class NDLOCREngine:
         args.rec_classes         = str(src_dir / "config" / "NDLmoji.yaml")
         args.device              = device
         args.intra_op_num_threads = intra_op_num_threads
+        args.use_fp16            = use_fp16
 
         print("[NDLOCREngine] Loading PARSEQ recognizers …", flush=True)
         self.recognizer100 = _ndlocr.get_recognizer(args=args, max_batch=max_batch)
@@ -633,15 +636,23 @@ def _startup() -> None:
     else:  # auto
         use_batch = (device == "cuda")
 
+    if PRECISION_SETTING == "fp16":
+        use_fp16 = True
+    elif PRECISION_SETTING == "fp32":
+        use_fp16 = False
+    else:  # auto: fp16 on CUDA, fp32 on CPU
+        use_fp16 = (device == "cuda")
+
     print(
         f"[startup] device={device}, port={SERVER_PORT}, "
         f"page_workers={MAX_PAGE_WORKERS}, batch_inference={use_batch}, "
         f"max_batch={MAX_PARSEQ_BATCH if use_batch else 'N/A'}, "
+        f"precision={'fp16' if use_fp16 else 'fp32'}, "
         f"intra_op_threads={INTRA_OP_THREADS}",
         flush=True,
     )
     # Raises on missing model files – server will not start
-    _engine = NDLOCREngine(src_dir=_src_dir, device=device, max_workers=MAX_PAGE_WORKERS, use_batch=use_batch, max_batch=MAX_PARSEQ_BATCH, intra_op_num_threads=INTRA_OP_THREADS)
+    _engine = NDLOCREngine(src_dir=_src_dir, device=device, max_workers=MAX_PAGE_WORKERS, use_batch=use_batch, max_batch=MAX_PARSEQ_BATCH, intra_op_num_threads=INTRA_OP_THREADS, use_fp16=use_fp16)
 
 
 # ---------------------------------------------------------------------------
