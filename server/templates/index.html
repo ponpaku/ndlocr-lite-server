@@ -325,9 +325,6 @@
 					<div class="header-right">
 						<span class="tag" id="statusModel">model: -</span>
 						<span class="tag" id="statusDevice">device: -</span>
-						<span class="tag" id="statusCuda">
-							<span class="tag-dot" id="cudaDot"></span>cuda: -
-						</span>
 						<button class="btn-icon" id="themeToggle" title="ダークモード切替" aria-label="toggle dark mode">🌙</button>
 					</div>
 				</div>
@@ -521,15 +518,6 @@ async function fetchStatus() {
 		const p = await r.json();
 		document.getElementById("statusModel").textContent  = `model: ${p.model || "-"}`;
 		document.getElementById("statusDevice").textContent = `device: ${p.device_default || "-"}`;
-		const cudaOk = !!p.cuda_available;
-		document.getElementById("statusCuda").innerHTML =
-			`<span class="tag-dot ${cudaOk ? "green" : "red"}"></span>cuda: ${cudaOk}`;
-		const cudaOpt = document.querySelector('#device option[value="cuda"]');
-		if (cudaOpt) {
-			cudaOpt.disabled = !cudaOk;
-			if (!cudaOk && document.getElementById("device").value === "cuda")
-				document.getElementById("device").value = "auto";
-		}
 	} catch(_) {}
 }
 
