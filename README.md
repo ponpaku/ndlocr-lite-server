@@ -142,6 +142,8 @@ python tools/patch_dynamic_batch_v2.py
 | parseq-ndl-16×384-50（`*_dynamic.onnx`） | 1〜32 |
 | parseq-ndl-16×768-100（`*_dynamic.onnx`） | 1〜32 |
 
+検証環境：Intel Core i7-14700K / NVIDIA GeForce RTX 3060 12GB
+
 | 環境 | 逐次処理 | バッチ処理（batch=16） | 高速化率 |
 |------|---------|----------------------|---------|
 | CPU  | 335 ms  | 257 ms               | 1.3 倍  |
