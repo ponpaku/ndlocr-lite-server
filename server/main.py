@@ -939,30 +939,68 @@ def _process_sync(
             _engine.reload_sessions()
         if suffix == ".pdf":
             _progress[rid]["message"] = "PDF を変換中..."
-            total = 0
+            total_ref = [0]   # render thread が書き込み、メインスレッドが読む
             page_offset = 0
 
-            # Stream pages MAX_PAGE_WORKERS at a time to avoid loading the
-            # entire PDF into RAM at once.
-            page_gen = _iter_pdf_pages(file_bytes, dpi)
-            try:
-                while not is_canceled():
-                    # Render next chunk of pages
+            # Async PDF rendering: render the next chunk in a background thread
+            # while the GPU processes the current chunk.
+            rendered_chunks: queue.Queue = queue.Queue(maxsize=2)
+            _stop_render = threading.Event()
+
+            def _render_worker() -> None:
+                """Background thread: render PDF pages into chunks and enqueue them."""
+                page_gen = _iter_pdf_pages(file_bytes, dpi)
+                try:
                     chunk: List[Image.Image] = []
                     for n, img in page_gen:
-                        if total == 0:
-                            total = n
-                            _progress[rid]["total_pages"] = total
+                        if _stop_render.is_set():
+                            break
+                        if total_ref[0] == 0:
+                            total_ref[0] = n
+                            _progress[rid]["total_pages"] = n
                             print(
-                                f"[OCR] {filename}  PDF: {total}ページ, {dpi}dpi",
+                                f"[OCR] {filename}  PDF: {n}ページ, {dpi}dpi",
                                 flush=True,
                             )
                         chunk.append(img)
                         if len(chunk) >= MAX_PAGE_WORKERS:
-                            break
+                            # put with timeout loop to respect stop signal
+                            while not _stop_render.is_set():
+                                try:
+                                    rendered_chunks.put(chunk, timeout=0.5)
+                                    break
+                                except queue.Full:
+                                    pass
+                            chunk = []
+                    if chunk and not _stop_render.is_set():
+                        while not _stop_render.is_set():
+                            try:
+                                rendered_chunks.put(chunk, timeout=0.5)
+                                break
+                            except queue.Full:
+                                pass
+                except Exception as exc:
+                    try:
+                        rendered_chunks.put(exc, timeout=1)
+                    except queue.Full:
+                        pass
+                finally:
+                    rendered_chunks.put(None)  # sentinel
+                    page_gen.close()
 
-                    if not chunk:
+            render_thread = threading.Thread(
+                target=_render_worker, daemon=True, name="pdf-render"
+            )
+            render_thread.start()
+            try:
+                while not is_canceled():
+                    item = rendered_chunks.get()
+                    if item is None:  # sentinel: no more chunks
                         break
+                    if isinstance(item, Exception):
+                        raise item
+                    chunk = item
+                    total = total_ref[0]
 
                     _chunk_offset = page_offset
 
@@ -997,11 +1035,18 @@ def _process_sync(
                             error=error,
                         ))
                     page_offset += len(chunk)
-                    # chunk goes out of scope here → page images freed
             finally:
-                page_gen.close()  # ensure temp PDF file is removed
+                _stop_render.set()
+                # drain queue to unblock render thread if blocked on put()
+                while True:
+                    try:
+                        rendered_chunks.get_nowait()
+                    except queue.Empty:
+                        break
+                render_thread.join(timeout=5)
 
             # Fill any pages skipped due to cancellation
+            total = total_ref[0]
             for i in range(len(page_results), total if total > 0 else page_offset):
                 page_results.append(_make_page_result(i + 1, "", "", error="中断されました"))
 
