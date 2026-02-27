@@ -19,3 +19,6 @@
 
 # Claude Code セッション設定
 /.claude/
+
+# ローカルメモ・下書き
+/local-notes/

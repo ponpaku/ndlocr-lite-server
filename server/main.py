@@ -6,11 +6,11 @@ FastAPI-based local OCR server with a JSON API backend.
 
 Endpoints
 ---------
-GET  /                        – Web UI (SPA)
-GET  /api/status              – Model/device info
-POST /api/analyze             – Run OCR, returns JSON results
-GET  /api/progress/{id}       – Progress polling
-POST /api/cancel/{id}         – Cancel in-flight request
+GET  /                            – Web UI (SPA)
+GET  /api/status                  – Model/device info
+POST /api/jobs                    – Submit OCR job, returns job_id immediately
+GET  /api/jobs/{job_id}           – Poll job state/progress; includes results when done
+POST /api/jobs/{job_id}/cancel    – Cancel an in-flight job
 
 Usage
 -----
@@ -44,6 +44,8 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
+import uuid
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
@@ -78,7 +80,7 @@ def _c(section: str, key: str, default):
 
 import numpy as np
 import uvicorn
-from fastapi import BackgroundTasks, FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from PIL import Image
@@ -656,10 +658,23 @@ def _startup() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Request state (progress + cancellation)
+# Job state
 # ---------------------------------------------------------------------------
-_progress: dict = {}     # request_id → {"state", "message", "total_pages"}
-_cancel_flags: dict = {} # request_id → bool
+_jobs: Dict[str, dict] = {}
+# Structure per job_id:
+# {
+#   "state": "queued|processing|done|error|canceled|canceling",
+#   "message": str,
+#   "total_pages": int,
+#   "cancel_requested": bool,
+#   "results": Optional[List[dict]],
+#   "error_detail": Optional[str],
+#   "completed_at": Optional[float],
+#   "linebreak_mode": str,
+#   "reading_order": str,
+# }
+
+JOB_TTL_SECONDS = 300  # remove completed jobs after 5 minutes
 
 _request_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ocr-request")
 
@@ -938,21 +953,21 @@ def _process_sync(
     request_id: str,
 ) -> List[dict]:
     """Synchronously process a file; runs in a worker thread."""
-    import time
     rid = request_id
     suffix = Path(filename).suffix.lower()
     page_results: List[dict] = []
-    t_total = time.perf_counter()
 
     def is_canceled() -> bool:
-        return bool(_cancel_flags.get(rid))
+        return bool(_jobs[rid].get("cancel_requested", False))
 
     def _set_progress(key: str, value) -> None:
-        if rid and rid in _progress:
-            _progress[rid][key] = value
+        if rid and rid in _jobs:
+            _jobs[rid][key] = value
 
     _engine._inference_lock.acquire()
+    t_total = time.perf_counter()  # start after queue wait
     try:
+        _jobs[rid]["state"] = "processing"
         if _engine.device == "cuda" and not _engine._sessions_loaded:
             _engine.reload_sessions()
         if suffix == ".pdf":
@@ -1149,6 +1164,53 @@ def _cuda_cleanup_task() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Job lifecycle helpers
+# ---------------------------------------------------------------------------
+
+def _on_job_done(job_id: str, future) -> None:
+    """Callback invoked by the executor when a job's future completes."""
+    try:
+        results = future.result()
+        canceled = _jobs[job_id].get("cancel_requested", False)
+        _jobs[job_id].update({
+            "state": "canceled" if canceled else "done",
+            "message": "中断" if canceled else "完了",
+            "results": results,
+            "completed_at": time.time(),
+        })
+    except Exception as exc:
+        _jobs[job_id].update({
+            "state": "error",
+            "message": str(exc),
+            "error_detail": str(exc),
+            "results": [],
+            "completed_at": time.time(),
+        })
+    if _engine.device == "cuda":
+        threading.Thread(target=_cuda_cleanup_task, daemon=True).start()
+
+
+async def _cleanup_old_jobs() -> None:
+    """Periodically remove completed jobs older than JOB_TTL_SECONDS."""
+    while True:
+        await asyncio.sleep(60)
+        now = time.time()
+        to_delete = [
+            jid for jid, job in list(_jobs.items())
+            if job.get("completed_at") and now - job["completed_at"] > JOB_TTL_SECONDS
+        ]
+        for jid in to_delete:
+            _jobs.pop(jid, None)
+        if to_delete:
+            print(f"[jobs] cleaned up {len(to_delete)} expired job(s)", flush=True)
+
+
+@app.on_event("startup")
+async def _start_cleanup_task() -> None:
+    asyncio.create_task(_cleanup_old_jobs())
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -1167,14 +1229,12 @@ async def api_status():
     }
 
 
-@app.post("/api/analyze")
-async def api_analyze(
-    background_tasks: BackgroundTasks,
+@app.post("/api/jobs")
+async def api_submit_job(
     file: UploadFile = File(...),
     dpi: int = Form(220),
     linebreak_mode: str = Form("none"),
     reading_order: str = Form("auto"),
-    request_id: str = Form(""),
     # Accept but ignore parameters not applicable to NDLOCR-Lite
     device: str = Form("auto"),
     task: str = Form("text"),
@@ -1189,65 +1249,62 @@ async def api_analyze(
 ):
     file_bytes = await file.read()
     filename = file.filename or "upload"
+    job_id = str(uuid.uuid4())
 
-    rid = request_id or ""
-    if rid:
-        _progress[rid] = {"state": "processing", "message": "処理開始中...", "total_pages": 0}
-        _cancel_flags[rid] = False
-
-    loop = asyncio.get_event_loop()
-    try:
-        results = await loop.run_in_executor(
-            _request_executor,
-            functools.partial(_process_sync, file_bytes, filename, dpi, linebreak_mode, rid),
-        )
-    except Exception as exc:
-        if rid:
-            _progress[rid] = {"state": "error", "message": str(exc), "total_pages": 0}
-        return {"results": [], "state": "error", "detail": str(exc)}
-
-    canceled = bool(_cancel_flags.get(rid))
-    state = "canceled" if canceled else "done"
-
-    if rid:
-        _progress[rid] = {
-            "state": state,
-            "message": "中断" if canceled else "完了",
-            "total_pages": len(results),
-        }
-        _cancel_flags.pop(rid, None)
-
-    if _engine.device == "cuda":
-        background_tasks.add_task(_cuda_cleanup_task)
-
-    return {
-        "results": results,
-        "task": "text",
+    _jobs[job_id] = {
+        "state": "queued",
+        "message": "キュー待ち...",
+        "total_pages": 0,
+        "cancel_requested": False,
+        "results": None,
+        "error_detail": None,
+        "completed_at": None,
         "linebreak_mode": linebreak_mode,
-        "page_count": len(results),
-        "device": _engine.device,
-        "use_layout": False,
-        "layout_backend": "-",
         "reading_order": reading_order,
-        "state": state,
     }
 
-
-@app.get("/api/progress/{request_id}")
-async def api_progress(request_id: str):
-    return _progress.get(
-        request_id,
-        {"state": "unknown", "message": "不明なリクエスト", "total_pages": 0},
+    future = _request_executor.submit(
+        _process_sync, file_bytes, filename, dpi, linebreak_mode, job_id
     )
+    future.add_done_callback(functools.partial(_on_job_done, job_id))
+
+    return {"job_id": job_id, "state": "queued"}
 
 
-@app.post("/api/cancel/{request_id}")
-async def api_cancel(request_id: str):
-    if request_id not in _cancel_flags:
-        return {"message": "リクエストが見つかりません"}
-    _cancel_flags[request_id] = True
-    if request_id in _progress:
-        _progress[request_id]["state"] = "canceling"
+@app.get("/api/jobs/{job_id}")
+async def api_job_status(job_id: str):
+    job = _jobs.get(job_id)
+    if job is None:
+        return {"state": "not_found", "message": "ジョブが見つかりません", "total_pages": 0}
+
+    base = {
+        "state": job["state"],
+        "message": job["message"],
+        "total_pages": job["total_pages"],
+    }
+
+    if job["state"] in ("done", "canceled", "error"):
+        results = job.get("results") or []
+        base.update({
+            "results": results,
+            "task": "text",
+            "linebreak_mode": job["linebreak_mode"],
+            "page_count": len(results),
+            "device": _engine.device,
+            "reading_order": job["reading_order"],
+            "error_detail": job.get("error_detail"),
+        })
+
+    return base
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+async def api_cancel_job(job_id: str):
+    job = _jobs.get(job_id)
+    if job is None or job["state"] in ("done", "error", "canceled"):
+        return {"message": "キャンセルできません"}
+    job["cancel_requested"] = True
+    job["state"] = "canceling"
     return {"message": "中断要求を受け付けました"}
 
 

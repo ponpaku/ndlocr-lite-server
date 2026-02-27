@@ -542,14 +542,31 @@ function stopPolling() {
 
 function startPolling(rid) {
 	stopPolling();
+	const lbEl = document.getElementById("linebreak_mode");
+	const lbLabel = lbEl.options[lbEl.selectedIndex].text;
 	const poll = async () => {
 		try {
-			const r = await fetch(`/api/progress/${encodeURIComponent(rid)}`);
+			const r = await fetch(`/api/jobs/${encodeURIComponent(rid)}`);
 			if (!r.ok) return;
 			const p = await r.json();
 			setBusy(true, p.message || "解析中...");
 			if (p.total_pages) document.getElementById("tagPages").textContent = `pages: ${p.total_pages}`;
-			if (p.state === "done" || p.state === "error" || p.state === "canceled") stopPolling();
+
+			if (p.state === "done" || p.state === "canceled") {
+				stopPolling();
+				activeRequestId = null;
+				renderResults(p, lbLabel);
+			} else if (p.state === "error") {
+				stopPolling();
+				activeRequestId = null;
+				textContent.textContent = `エラー: ${p.error_detail || p.message || "不明なエラー"}`;
+				setBusy(false, "失敗");
+			} else if (p.state === "not_found") {
+				stopPolling();
+				activeRequestId = null;
+				textContent.textContent = "ジョブが見つかりません（サーバーが再起動した可能性があります）";
+				setBusy(false, "失敗");
+			}
 		} catch(_) {}
 	};
 	poll();
@@ -565,10 +582,6 @@ function setBusy(busy, msg) {
 	cancelBtn.disabled = !canCancel;
 	cancelBtn.classList.toggle("hidden", !canCancel);
 	requestNote.textContent = msg;
-}
-
-function genId() {
-	return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -725,6 +738,39 @@ pageSelect.addEventListener("change", () => {
 });
 
 // ─────────────────────────────────────────────────────────
+// Result rendering (called from polling on completion)
+// ─────────────────────────────────────────────────────────
+function renderResults(payload, lbLabel) {
+	currentResults = Array.isArray(payload.results) ? payload.results : [];
+
+	document.getElementById("tagPages").textContent  = `pages: ${payload.page_count || 0}`;
+	document.getElementById("tagDevice").textContent = `device: ${payload.device || "-"}`;
+
+	if (currentResults.length === 0) {
+		textContent.textContent = payload.state === "canceled" ? "中断しました。" : "結果が空です。";
+		setBusy(false, payload.state === "canceled" ? "中断" : "完了");
+		return;
+	}
+
+	pageSelect.innerHTML = "";
+	if (currentResults.length > 1) {
+		const all = document.createElement("option");
+		all.value = "all"; all.textContent = "ALL";
+		pageSelect.appendChild(all);
+		currentResults.forEach((r, i) => {
+			const opt = document.createElement("option");
+			opt.value = String(i); opt.textContent = `Page ${r.page}`;
+			pageSelect.appendChild(opt);
+		});
+		pageSelect.value = "0";
+		pagePickerWrap.classList.remove("hidden");
+	}
+
+	renderPage(0);
+	setBusy(false, payload.state === "canceled" ? "中断" : "完了");
+}
+
+// ─────────────────────────────────────────────────────────
 // Submit
 // ─────────────────────────────────────────────────────────
 form.addEventListener("submit", async e => {
@@ -734,14 +780,10 @@ form.addEventListener("submit", async e => {
 		return;
 	}
 
-	const rid = genId();
-	activeRequestId = rid;
-
 	const fd = new FormData();
 	fd.append("file",           fileInput.files[0]);
 	fd.append("dpi",            document.getElementById("dpi").value);
 	fd.append("linebreak_mode", document.getElementById("linebreak_mode").value);
-	fd.append("request_id",     rid);
 
 	currentResults = [];
 	currentPageIndex = 0;
@@ -762,48 +804,13 @@ form.addEventListener("submit", async e => {
 	document.getElementById("tagPages").textContent     = "pages: -";
 	document.getElementById("tagDevice").textContent    = "device: -";
 
-	startPolling(rid);
-
 	try {
-		const res = await fetch("/api/analyze", { method: "POST", body: fd });
-		const payload = await res.json();
-		stopPolling();
-		activeRequestId = null;
-
-		if (!res.ok) throw new Error(payload.detail || "API error");
-
-		currentResults = Array.isArray(payload.results) ? payload.results : [];
-
-		document.getElementById("tagLinebreak").textContent = `改行: ${lbLabel}`;
-		document.getElementById("tagPages").textContent     = `pages: ${payload.page_count || 0}`;
-		document.getElementById("tagDevice").textContent    = `device: ${payload.device || "-"}`;
-
-		if (currentResults.length === 0) {
-			textContent.textContent = payload.state === "canceled" ? "中断しました。" : "結果が空です。";
-			setBusy(false, payload.state === "canceled" ? "中断" : "完了");
-			return;
-		}
-
-		pageSelect.innerHTML = "";
-		if (currentResults.length > 1) {
-			const all = document.createElement("option");
-			all.value = "all"; all.textContent = "ALL";
-			pageSelect.appendChild(all);
-			currentResults.forEach((r, i) => {
-				const opt = document.createElement("option");
-				opt.value = String(i); opt.textContent = `Page ${r.page}`;
-				pageSelect.appendChild(opt);
-			});
-			pageSelect.value = "0";
-			pagePickerWrap.classList.remove("hidden");
-		}
-
-		renderPage(0);
-		setBusy(false, payload.state === "canceled" ? "中断" : "完了");
-
+		const res = await fetch("/api/jobs", { method: "POST", body: fd });
+		if (!res.ok) throw new Error("ジョブの送信に失敗しました");
+		const { job_id } = await res.json();
+		activeRequestId = job_id;
+		startPolling(job_id);
 	} catch(err) {
-		stopPolling();
-		activeRequestId = null;
 		textContent.textContent = `エラー: ${err.message}`;
 		setBusy(false, "失敗");
 	}
@@ -816,7 +823,7 @@ cancelBtn.addEventListener("click", async () => {
 	if (!activeRequestId) return;
 	cancelBtn.disabled = true;
 	try {
-		const res = await fetch(`/api/cancel/${encodeURIComponent(activeRequestId)}`, { method: "POST" });
+		const res = await fetch(`/api/jobs/${encodeURIComponent(activeRequestId)}/cancel`, { method: "POST" });
 		const p = await res.json();
 		requestNote.textContent = p.message || "中断要求を受け付けました";
 	} catch(err) {
