@@ -40,6 +40,7 @@ import html as _html_mod
 import os
 import queue
 import re
+import subprocess
 import sys
 import tempfile
 import threading
@@ -111,6 +112,15 @@ BATCH_INFERENCE_SETTING: str = os.environ.get("NDLOCR_BATCH_INFERENCE", "auto").
 # because the fully-unrolled AR loop keeps all intermediate tensors in VRAM.
 # 0 = unlimited (not recommended for CUDA).
 MAX_PARSEQ_BATCH: int = int(os.environ.get("NDLOCR_MAX_BATCH", "16"))
+
+# VRAM management after each request.
+# never : セッションを解放しない（デフォルト。warmup済みなら推奨）
+# always: 毎リクエスト後に解放・再ロード（旧動作）
+# auto  : NDLOCR_VRAM_LIMIT_GB を超えたときだけ解放・再ロード
+RELOAD_MODE: str = os.environ.get("NDLOCR_RELOAD", "never").lower()
+
+# RELOAD_MODE=auto のときのリロード閾値 (GB)。この値を超えたリクエストの後にセッションを再ロードする。0 は無効。
+VRAM_RELOAD_THRESHOLD_GB: float = float(os.environ.get("NDLOCR_RELOAD_THRESHOLD_GB", "0"))
 
 # ---------------------------------------------------------------------------
 # OCR engine (singleton with pre-loaded models)
@@ -862,16 +872,51 @@ def _process_sync(
 # Post-response VRAM cleanup (runs after HTTP response is sent)
 # ---------------------------------------------------------------------------
 
-def _cuda_cleanup_task() -> None:
-    """Release VRAM then pre-load fresh sessions for the next request.
+def _query_vram_used_gb(gpu_index: int = 0) -> float:
+    """Return current GPU VRAM usage in GB via nvidia-smi. Returns 0.0 on failure."""
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                f"--id={gpu_index}",
+                "--query-gpu=memory.used",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            mb = int(result.stdout.strip().split("\n")[0].strip())
+            return mb / 1024.0
+    except Exception:
+        pass
+    return 0.0
 
-    Called by FastAPI BackgroundTasks, which guarantees this runs only
-    after the response body has been fully sent to the client.
+
+def _cuda_cleanup_task() -> None:
+    """Conditionally release VRAM and pre-load fresh sessions.
+
+    Behaviour is controlled by RELOAD_MODE / VRAM_LIMIT_GB:
+      never  – no-op (pool stays warm; recommended when warmup is enabled)
+      always – release + reload after every request (old behaviour)
+      auto   – release + reload only when VRAM usage exceeds VRAM_LIMIT_GB
     """
+    if RELOAD_MODE == "never":
+        return
+
+    if RELOAD_MODE == "auto":
+        if VRAM_RELOAD_THRESHOLD_GB <= 0:
+            return
+        used_gb = _query_vram_used_gb()
+        if used_gb > 0 and used_gb < VRAM_RELOAD_THRESHOLD_GB:
+            print(f"[VRAM] {used_gb:.1f} GB < threshold {VRAM_RELOAD_THRESHOLD_GB} GB – skip reload", flush=True)
+            return
+        print(f"[VRAM] {used_gb:.1f} GB >= threshold {VRAM_RELOAD_THRESHOLD_GB} GB – reloading sessions", flush=True)
+
     with _engine._inference_lock:
         if _engine._sessions_loaded:
             _engine.release_sessions()
-    # Pre-load sessions so next request starts without reload delay.
     _engine._preload_bg()
 
 
@@ -944,8 +989,6 @@ async def api_analyze(
         }
         _cancel_flags.pop(rid, None)
 
-    # Schedule VRAM release + session pre-load to run AFTER the response
-    # is fully sent to the client (FastAPI BackgroundTasks guarantee).
     if _engine.device == "cuda":
         background_tasks.add_task(_cuda_cleanup_task)
 

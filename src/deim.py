@@ -54,6 +54,12 @@ class DEIM:
                 self.classes = yaml_file['names']
                 self.color_palette = np.random.uniform(0, 255, size=(len(self.classes), 3))
 
+        if self.device.casefold() == "cuda":
+            dummy_img = np.zeros((1, 3, self.input_height, self.input_width), dtype=np.float32)
+            dummy_size = np.array([[self.input_height, self.input_width]], np.int64)
+            self.session.run(self.output_names, {self.input_names[0]: dummy_img, self.input_names[1]: dummy_size})
+            print(f"[DEIM] warmup done (cuda)", flush=True)
+
     def preprocess(self, img: np.ndarray) -> np.ndarray:
         max_wh=max(img.shape[0],img.shape[1])
         paddedimg=np.zeros((max_wh,max_wh,3)).astype(np.uint8)

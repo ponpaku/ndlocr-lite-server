@@ -43,10 +43,10 @@ cp .env.example .env
 | `NDLOCR_DEVICE` | `auto` | `auto` / `cuda` / `cpu` |
 | `NDLOCR_PAGE_WORKERS` | `2` | PDF 並列処理ページ数 |
 | `NDLOCR_MAX_BATCH` | `16` | PARSEQ バッチサイズ上限（VRAM 使用量に影響） |
+| `NDLOCR_RELOAD` | `never` | セッション解放モード：`never` / `always` / `auto` |
+| `NDLOCR_RELOAD_THRESHOLD_GB` | `0` | `auto` 時のリロード閾値 GB（0 = 無効） |
 
 GPU（CUDA）を使用する場合は `requirements.txt` のまま（`onnxruntime-gpu`）でセットアップしてください。CPU のみの環境では `onnxruntime-gpu` を `onnxruntime` に置き換えてインストールしてください。
-
-API リファレンスは [`server/server_readme.md`](./server/server_readme.md) を参照してください。
 
 ---
 
@@ -73,7 +73,8 @@ FastAPI + Uvicorn による Web サーバーを新設した。
 - 複数ページを `MAX_PAGE_WORKERS`（デフォルト 2）枚単位で並列処理
 - DEIM 検出器はプール管理でスレッド安全性を確保
 - CUDA / cuDNN の有無を起動時に自動判定し、利用可能なら GPU に切り替え
-- 処理完了後に PARSEQ セッションを解放し VRAM を回復、バックグラウンドで再ロード
+- CUDA 起動時に全バッチサイズでウォームアップ推論を実行し、CUDA メモリアリーナを事前展開
+- `NDLOCR_RELOAD` 設定により、処理後の VRAM 使用量が閾値を超えた場合のセッション解放・再ロードをオプションで有効化
 
 #### 2. PARSEQ モデルの動的バッチ対応（`tools/patch_dynamic_batch_v2.py`）
 
