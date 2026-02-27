@@ -44,11 +44,6 @@ class DEIM:
                 ('CUDAExecutionProvider', {'arena_extend_strategy': 'kSameAsRequested'}),
                 'CPUExecutionProvider',
             ]
-        elif dev == "directml":
-            providers = [
-                'DmlExecutionProvider',
-                'CPUExecutionProvider',
-            ]
         session = onnxruntime.InferenceSession(self.model_path, opt_session, providers=providers)
         self.session = session
         self.model_inputs = self.session.get_inputs()

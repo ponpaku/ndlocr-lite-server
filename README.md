@@ -40,15 +40,15 @@ cp config.toml.example config.toml
 |------|-----------|------|
 | `server.host` | `"127.0.0.1"` | 待受ホスト（外部公開時は `"0.0.0.0"`） |
 | `server.port` | `7860` | 待受ポート |
-| `runtime.package` | `"gpu"` | インストールするパッケージ：`"gpu"` / `"directml"` / `"cpu"`（変更時は `.venv` を削除して再実行） |
-| `runtime.device` | `"auto"` | `"auto"`（CUDA→DirectML→CPU）/ `"cuda"` / `"directml"` / `"cpu"` |
+| `runtime.device` | `"auto"` | `"auto"`（CUDA→CPU）/ `"cuda"` / `"cpu"` |
 | `processing.page_workers` | `2` | PDF 並列処理ページ数 |
+| `processing.batch_inference` | `"auto"` | PARSEQ バッチ推論：`"auto"`（CUDA のみ有効）/ `"true"` / `"false"` |
 | `processing.max_batch` | `16` | PARSEQ バッチサイズ上限（VRAM 使用量に影響） |
 | `vram.reload` | `"never"` | セッション解放モード：`"never"` / `"always"` / `"auto"` |
 | `vram.reload_threshold_gb` | `0.0` | `"auto"` 時のリロード閾値 GB（0 = 無効） |
 | `cpu.intra_op_threads` | `1` | CPU モード時のスレッド数（`-1` で onnxruntime 自動） |
 
-`runtime.package` に応じた requirements ファイルが自動的に選択されます（`requirements-gpu.txt` / `requirements-directml.txt` / `requirements-cpu.txt`）。
+requirements ファイルは OS に応じて自動選択されます（Windows/Linux: `requirements-gpu.txt`、macOS: `requirements-cpu.txt`）。
 
 ---
 
@@ -72,12 +72,12 @@ FastAPI + Uvicorn による Web サーバーを新設した。
 - ブラウザから画像・PDF をアップロードして OCR を実行できる
 - JSON API を備え、外部ツールからの呼び出しにも対応
 - PDF は pypdfium2 でページ画像に変換してから処理
-- 複数ページを `MAX_PAGE_WORKERS` 枚単位でチャンク処理
+- 複数ページを `processing.page_workers` 枚単位でチャンク処理
 - DEIM 検出をチャンク内で並列実行し、全ページの行画像をまとめて 1 回の cascade batch に投入（ページ間クロスバッチ化）
 - DEIM 検出器はプール管理でスレッド安全性を確保
 - CUDA / cuDNN の有無を起動時に自動判定し、利用可能なら GPU に切り替え
 - CUDA 起動時に全バッチサイズでウォームアップ推論を実行し、CUDA メモリアリーナを事前展開
-- `NDLOCR_RELOAD` 設定により、処理後の VRAM 使用量が閾値を超えた場合のセッション解放・再ロードをオプションで有効化
+- `vram.reload` 設定により、処理後の VRAM 使用量が閾値を超えた場合のセッション解放・再ロードをオプションで有効化
 
 #### 2. PARSEQ モデルの動的バッチ対応（`tools/patch_dynamic_batch_v2.py`）
 

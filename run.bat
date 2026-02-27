@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 rem
 rem Run NDLOCR‑Lite web server inside a Python virtual environment.
 rem
@@ -18,20 +19,8 @@ if not exist "config.toml" (
   )
 )
 
-rem --- Read runtime.package from config.toml (default: gpu) ---
-rem     Supported values: gpu / directml / cpu
-rem     !! runtime.package を変更した場合は .venv を削除して再実行してください !!
-set "NDLOCR_RUNTIME=gpu"
-if exist "config.toml" (
-    for /f "usebackq tokens=*" %%a in (`findstr /B "package" config.toml 2^>nul`) do (
-        for /f "tokens=2 delims=""" %%b in ("%%a") do set "NDLOCR_RUNTIME=%%b"
-    )
-)
-
-if "%NDLOCR_RUNTIME%"=="gpu"       set "REQ_FILE=requirements-gpu.txt"
-if "%NDLOCR_RUNTIME%"=="directml"  set "REQ_FILE=requirements-directml.txt"
-if "%NDLOCR_RUNTIME%"=="cpu"       set "REQ_FILE=requirements-cpu.txt"
-if not defined REQ_FILE            set "REQ_FILE=requirements-gpu.txt"
+rem --- Always use onnxruntime-gpu on Windows (includes CPU fallback) ---
+set "REQ_FILE=requirements-gpu.txt"
 
 if not exist "%VENV%\Scripts\python.exe" (
   echo Creating virtual environment in %VENV%

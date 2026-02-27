@@ -44,11 +44,6 @@ class PARSEQ:
                 ('CUDAExecutionProvider', {'arena_extend_strategy': 'kSameAsRequested'}),
                 'CPUExecutionProvider',
             ]
-        elif dev == "directml":
-            providers = [
-                'DmlExecutionProvider',
-                'CPUExecutionProvider',
-            ]
         # Prefer the best available model variant
         load_path = self._preferred_path()
         session = onnxruntime.InferenceSession(load_path, opt_session, providers=providers)

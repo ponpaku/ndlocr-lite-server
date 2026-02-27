@@ -16,22 +16,10 @@ port = 7860
 [runtime]
 # ---------------------------------------------------------------------------
 
-# インストールする onnxruntime パッケージ。
-# "gpu"      : onnxruntime-gpu（NVIDIA GPU + CUDA。通常はこれを使う）
-# "directml" : onnxruntime-directml（Windows 専用。CUDA 不要で GPU を使える。
-#              NVIDIA/AMD/Intel の統合グラフィックスでも動作する）
-# "cpu"      : onnxruntime（CPU のみ。Linux / Mac や GPU なし環境向け）
-#
-# ※ gpu / directml / cpu は互いに共存できない別パッケージのため、
-#    この値を変更した場合は .venv を削除してから run スクリプトを再実行してください。
-#    削除コマンド例: rm -rf .venv  （Windows: rmdir /s /q .venv）
-package = "gpu"
-
 # 推論デバイス。
-# "auto"     : CUDA → DirectML → CPU の順で自動選択（推奨）
-# "cuda"     : CUDA 強制（利用不可の場合は cpu にフォールバック）
-# "directml" : DirectML 強制（runtime.package = "directml" 時のみ有効）
-# "cpu"      : CPU 強制
+# "auto" : CUDA → CPU の順で自動選択（推奨）
+# "cuda" : CUDA 強制（利用不可の場合は cpu にフォールバック）
+# "cpu"  : CPU 強制
 device = "auto"
 
 # ---------------------------------------------------------------------------

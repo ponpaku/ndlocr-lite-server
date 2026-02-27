@@ -618,21 +618,13 @@ def _startup() -> None:
     global _engine
     _setup_cuda_dll_paths()
 
-    if DEVICE_OVERRIDE in ("cuda", "cpu", "directml"):
+    if DEVICE_OVERRIDE in ("cuda", "cpu"):
         device = DEVICE_OVERRIDE
         if device == "cuda" and not _check_cuda():
-            print("[startup] NDLOCR_DEVICE=cuda but CUDA unavailable – falling back to cpu", flush=True)
+            print("[startup] device=cuda but CUDA unavailable – falling back to cpu", flush=True)
             device = "cpu"
-        elif device == "directml" and not _check_directml():
-            print("[startup] NDLOCR_DEVICE=directml but DirectML unavailable – falling back to cpu", flush=True)
-            device = "cpu"
-    else:  # auto: cuda → directml → cpu
-        if _check_cuda():
-            device = "cuda"
-        elif _check_directml():
-            device = "directml"
-        else:
-            device = "cpu"
+    else:  # auto: cuda → cpu
+        device = "cuda" if _check_cuda() else "cpu"
 
     if BATCH_INFERENCE_SETTING == "true":
         use_batch = True
@@ -643,7 +635,7 @@ def _startup() -> None:
 
     print(
         f"[startup] device={device}, port={SERVER_PORT}, "
-        f"MAX_PAGE_WORKERS={MAX_PAGE_WORKERS}, batch_inference={use_batch}, "
+        f"page_workers={MAX_PAGE_WORKERS}, batch_inference={use_batch}, "
         f"max_batch={MAX_PARSEQ_BATCH if use_batch else 'N/A'}, "
         f"intra_op_threads={INTRA_OP_THREADS}",
         flush=True,
@@ -664,13 +656,6 @@ _request_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ocr-re
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _check_directml() -> bool:
-    """Return True when DmlExecutionProvider is available (onnxruntime-directml installed)."""
-    try:
-        import onnxruntime as ort
-        return "DmlExecutionProvider" in ort.get_available_providers()
-    except Exception:
-        return False
 
 
 def _check_cuda() -> bool:

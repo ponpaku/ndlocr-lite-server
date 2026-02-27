@@ -19,21 +19,14 @@ if [ ! -f "config.toml" ] && [ -f "config.toml.example" ]; then
     cp "config.toml.example" "config.toml"
 fi
 
-# --- Read runtime.package from config.toml (default: gpu) ---
-# Supported values: gpu / directml / cpu
-# !! runtime.package を変更した場合は .venv を削除して再実行してください !!
-NDLOCR_RUNTIME="gpu"
-if [ -f "config.toml" ]; then
-    _pkg=$(sed -n '/^\[runtime\]/,/^\[/{/^package[[:space:]]*=/{s/.*=[[:space:]]*"\([^"]*\)".*/\1/;p;q}}' config.toml 2>/dev/null)
-    [ -n "$_pkg" ] && NDLOCR_RUNTIME="$_pkg"
+# --- Select requirements file based on OS ---
+# macOS does not support CUDA, so use CPU-only onnxruntime.
+# Windows and Linux use onnxruntime-gpu (falls back to CPU automatically).
+if [ "$(uname -s)" = "Darwin" ]; then
+    REQ_FILE="requirements-cpu.txt"
+else
+    REQ_FILE="requirements-gpu.txt"
 fi
-
-case "$NDLOCR_RUNTIME" in
-    gpu)       REQ_FILE="requirements-gpu.txt" ;;
-    directml)  REQ_FILE="requirements-directml.txt" ;;
-    cpu)       REQ_FILE="requirements-cpu.txt" ;;
-    *)         REQ_FILE="requirements-gpu.txt" ;;
-esac
 
 if [ ! -d "$VENV" ]; then
   echo "Creating virtual environment in $VENV"
