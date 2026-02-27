@@ -107,7 +107,7 @@ python server/main.py
 
 ```
 [CUDA] registered: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.5\bin
-[startup] device=cuda, MAX_PAGE_WORKERS=2
+[startup] device=cuda, port=7860, page_workers=2, batch_inference=True, max_batch=16, precision=fp16, intra_op_threads=1
 [NDLOCREngine] Loading PARSEQ recognizers …
 [NDLOCREngine] Loading 2 DEIM detector(s) …
 [NDLOCREngine] Ready.
@@ -228,11 +228,14 @@ INFO:     Uvicorn running on http://127.0.0.1:7860
 
 ## 環境変数・設定
 
-| 変数名 | デフォルト | 説明 |
-|---|---|---|
-| `NDLOCR_PAGE_WORKERS` | `2` | PDF の同時処理ページ数。増やすと速くなるが VRAM / RAM 消費が増える |
-| `CUDNN_PATH` | - | cuDNN の bin ディレクトリパス。自動検出できない場合に設定 |
-| `CUDA_PATH` | - | CUDA Toolkit のルートパス |
+サーバーの動作設定は `config.toml`（リポジトリルート）で行います。詳細はリポジトリルートの `config.toml.example` を参照してください。
+
+CUDA / cuDNN のパスが自動検出できない場合は以下の環境変数で補完できます。
+
+| 変数名 | 説明 |
+|---|---|
+| `CUDNN_PATH` | cuDNN の bin ディレクトリパス |
+| `CUDA_PATH` | CUDA Toolkit のルートパス |
 
 ---
 

@@ -947,12 +947,16 @@ def _process_sync(
     def is_canceled() -> bool:
         return bool(_cancel_flags.get(rid))
 
+    def _set_progress(key: str, value) -> None:
+        if rid and rid in _progress:
+            _progress[rid][key] = value
+
     _engine._inference_lock.acquire()
     try:
         if _engine.device == "cuda" and not _engine._sessions_loaded:
             _engine.reload_sessions()
         if suffix == ".pdf":
-            _progress[rid]["message"] = "PDF を変換中..."
+            _set_progress("message", "PDF を変換中...")
             total_ref = [0]   # render thread が書き込み、メインスレッドが読む
             page_offset = 0
 
@@ -971,7 +975,7 @@ def _process_sync(
                             break
                         if total_ref[0] == 0:
                             total_ref[0] = n
-                            _progress[rid]["total_pages"] = n
+                            _set_progress("total_pages", n)
                             print(
                                 f"[OCR] {filename}  PDF: {n}ページ, {dpi}dpi",
                                 flush=True,
@@ -1020,7 +1024,7 @@ def _process_sync(
 
                     def on_progress(done: int, _total: int, _off: int = _chunk_offset) -> None:
                         abs_done = _off + done
-                        _progress[rid]["message"] = f"ページ {abs_done}/{total} 完了..."
+                        _set_progress("message", f"ページ {abs_done}/{total} 完了...")
 
                     t_chunk = time.perf_counter()
                     chunk_raw = _engine.infer_pages(chunk, on_progress, is_canceled)
@@ -1065,8 +1069,8 @@ def _process_sync(
                 page_results.append(_make_page_result(i + 1, "", "", error="中断されました"))
 
         else:
-            _progress[rid]["message"] = "画像を解析中..."
-            _progress[rid]["total_pages"] = 1
+            _set_progress("message", "画像を解析中...")
+            _set_progress("total_pages", 1)
             img = Image.open(BytesIO(file_bytes)).convert("RGB")
             t0 = time.perf_counter()
             result_dict = _engine.infer_image(img)
@@ -1084,7 +1088,7 @@ def _process_sync(
             ))
 
     except Exception as exc:
-        page_results.append(_make_page_result(1, "", "", str(exc)))
+        page_results.append(_make_page_result(1, "", "", error=str(exc)))
     finally:
         _engine._inference_lock.release()
 
