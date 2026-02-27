@@ -30,24 +30,11 @@ bash run.sh
 
 ## 設定
 
-`config.toml.example` を `config.toml` にコピーして編集してください（run スクリプトが自動でコピーします）。
+`config.toml.example` を `config.toml` にコピーして編集してください（run スクリプトが自動でコピーします）。各項目の説明はファイル内のコメントを参照してください。
 
 ```bash
 cp config.toml.example config.toml
 ```
-
-| キー | デフォルト | 説明 |
-|------|-----------|------|
-| `server.host` | `"127.0.0.1"` | 待受ホスト（外部公開時は `"0.0.0.0"`） |
-| `server.port` | `7860` | 待受ポート |
-| `runtime.device` | `"auto"` | `"auto"`（CUDA→CPU）/ `"cuda"` / `"cpu"` |
-| `processing.page_workers` | `2` | PDF 並列処理ページ数 |
-| `processing.batch_inference` | `"auto"` | PARSEQ バッチ推論：`"auto"`（CUDA のみ有効）/ `"true"` / `"false"` |
-| `processing.max_batch` | `16` | PARSEQ バッチサイズ上限（VRAM 使用量に影響） |
-| `processing.precision` | `"auto"` | PARSEQ 推論精度：`"auto"`（CUDA→fp16、CPU→fp32）/ `"fp16"` / `"fp32"` |
-| `vram.reload` | `"never"` | セッション解放モード：`"never"` / `"always"` / `"auto"` |
-| `vram.reload_threshold_gb` | `0.0` | `"auto"` 時のリロード閾値 GB（0 = 無効） |
-| `cpu.intra_op_threads` | `1` | CPU モード時のスレッド数（`-1` で onnxruntime 自動） |
 
 requirements ファイルは OS に応じて自動選択されます（Windows/Linux: `requirements-gpu.txt`、macOS: `requirements-cpu.txt`）。
 
