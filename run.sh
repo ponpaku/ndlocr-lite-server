@@ -34,7 +34,7 @@ if [ ! -d "$VENV" ]; then
   source "$VENV/bin/activate"
   python -m pip install --upgrade pip
   echo "Installing dependencies from $REQ_FILE ..."
-  pip install -r "$REQ_FILE"
+  pip install --prefer-binary -r "$REQ_FILE"
 else
   source "$VENV/bin/activate"
 fi

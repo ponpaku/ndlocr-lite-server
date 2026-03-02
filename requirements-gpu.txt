@@ -1,13 +1,13 @@
-lxml==5.4.0
+lxml>=5.4.0
 networkx==3.3
 onnxruntime-gpu>=1.23.2
 pillow==12.1.1
 ordered-set==4.1.0
 protobuf==6.31.1
-PyYAML==6.0.1
+PyYAML>=6.0.1
 tqdm==4.66.4
 pypdfium2==4.30.0
-numpy>=1.26,<2.3
+numpy>=2.3,<2.3
 fastapi==0.111.0
 uvicorn==0.29.0
 tomli>=2.0.0; python_version < "3.11"

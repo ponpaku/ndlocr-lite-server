@@ -28,7 +28,7 @@ if not exist "%VENV%\Scripts\python.exe" (
   call "%VENV%\Scripts\activate"
   python -m pip install --upgrade pip
   echo Installing dependencies from %REQ_FILE% ...
-  pip install -r "%REQ_FILE%"
+  pip install --prefer-binary -r "%REQ_FILE%"
 ) else (
   call "%VENV%\Scripts\activate"
 )
