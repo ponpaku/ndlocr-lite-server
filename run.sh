@@ -31,13 +31,17 @@ if [ ! -f "config.toml" ] && [ -f "config.toml.example" ]; then
     cp "config.toml.example" "config.toml"
 fi
 
-# --- Select requirements file based on OS ---
-# macOS does not support CUDA, so use CPU-only onnxruntime.
-# Windows and Linux use onnxruntime-gpu (falls back to CPU automatically).
+# --- Select requirements file based on OS / CUDA availability ---
+# macOS never has CUDA. On Linux, check nvidia-smi.
 if [ "$(uname -s)" = "Darwin" ]; then
     REQ_FILE="requirements-cpu.txt"
-else
+    echo "macOS detected - using CPU (onnxruntime)"
+elif command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
     REQ_FILE="requirements-gpu.txt"
+    echo "CUDA detected - using GPU (onnxruntime-gpu)"
+else
+    REQ_FILE="requirements-cpu.txt"
+    echo "CUDA not detected - using CPU (onnxruntime)"
 fi
 
 if [ ! -d "$VENV" ]; then

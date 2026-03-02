@@ -38,8 +38,15 @@ if not exist "config.toml" (
   )
 )
 
-rem --- Always use onnxruntime-gpu on Windows (includes CPU fallback) ---
-set "REQ_FILE=requirements-gpu.txt"
+rem --- Select requirements based on CUDA availability ---
+nvidia-smi >nul 2>&1
+if errorlevel 1 (
+    set "REQ_FILE=requirements-cpu.txt"
+    echo CUDA not detected - using CPU (onnxruntime^)
+) else (
+    set "REQ_FILE=requirements-gpu.txt"
+    echo CUDA detected - using GPU (onnxruntime-gpu^)
+)
 
 if not exist "%VENV%\Scripts\python.exe" (
   echo Creating virtual environment in %VENV%
