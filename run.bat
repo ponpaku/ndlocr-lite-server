@@ -11,6 +11,25 @@ rem interpreter.
 
 set "VENV=.venv"
 
+rem --- Python version check (3.14+ は非対応) ---
+for /f "tokens=2" %%v in ('python --version 2^>^&1') do set "PY_VER=%%v"
+for /f "tokens=1,2 delims=." %%a in ("%PY_VER%") do (
+    set "PY_MAJOR=%%a"
+    set "PY_MINOR=%%b"
+)
+if %PY_MAJOR% GTR 3 goto :warn_ver
+if %PY_MAJOR% EQU 3 if %PY_MINOR% GEQ 14 goto :warn_ver
+goto :ver_ok
+:warn_ver
+echo.
+echo [警告] Python %PY_VER% は非対応です（推奨: 3.11〜3.13）
+echo        Python 3.13 がインストール済みであれば run-py313.bat を使用してください。
+echo        インストールされていない場合は以下のコマンドでインストールできます:
+echo          py -3.13 （py ランチャー経由）または https://python.org からダウンロード
+echo.
+pause
+:ver_ok
+
 rem --- Copy config.toml.example → config.toml if not present ---
 if not exist "config.toml" (
   if exist "config.toml.example" (

@@ -16,7 +16,7 @@
 
 ## セットアップ・起動
 
-Python 3.11 以上が必要です（3.14 は一部パッケージの wheel が未対応のため 3.11〜3.13 を推奨）。リポジトリをクローン後、付属のスクリプトを実行してください。仮想環境の作成・依存パッケージのインストール・サーバー起動をまとめて行います。
+Python 3.11〜3.13 が必要です（3.14 は `onnxruntime-gpu` が `numpy<2.3` を要求する一方で 3.14 向け wheel が未提供のためインストール不可）。リポジトリをクローン後、付属のスクリプトを実行してください。仮想環境の作成・依存パッケージのインストール・サーバー起動をまとめて行います。
 
 ```bash
 # Windows
@@ -27,6 +27,34 @@ bash run.sh
 ```
 
 起動後、ブラウザで `http://127.0.0.1:7860` を開いてください。
+
+### Python 3.14 環境の場合
+
+デフォルトの Python が 3.14 以上の場合は Python 3.13 を別途インストールしてから専用スクリプトを使用してください。
+
+**Windows（py ランチャー使用）**
+
+```powershell
+# Python 3.13 をインストール（未インストールの場合）
+# https://www.python.org/downloads/ からダウンロード、または:
+winget install Python.Python.3.13
+
+# Python 3.13 専用スクリプトで起動（.venv313 を作成）
+run-py313.bat
+```
+
+**macOS / Linux**
+
+```bash
+# Python 3.13 をインストール（未インストールの場合）
+# Ubuntu/Debian:
+sudo apt install python3.13 python3.13-venv
+# macOS (Homebrew):
+brew install python@3.13
+
+# Python 3.13 専用スクリプトで起動（.venv313 を作成）
+bash run-py313.sh
+```
 
 ## 設定
 
